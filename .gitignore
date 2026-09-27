@@ -1,0 +1,58 @@
+# --- .NET -------------------------------------------------------------
+bin/
+obj/
+/artifacts/
+*.user
+*.suo
+*.rsuser
+*.DotSettings.user
+.vs/
+.idea/
+TestResults/
+coverage/
+*.coverage
+*.trx
+
+# --- Node / Playwright ------------------------------------------------
+node_modules/
+playwright-report/
+test-results/
+
+# --- Terraform / OpenTofu ---------------------------------------------
+# .terraform.lock.hcl is committed on purpose (AGENTS.md §7.4).
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# --- Secrets: never commit (AGENTS.md §2, invariant 8) -----------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.macaroon
+
+# --- Local regtest stack data -----------------------------------------
+.regtest/
+.docker-data/
+
+# --- Claude Code local-only settings ----------------------------------
+.claude/settings.local.json
+
+# --- OS / editor ------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*~

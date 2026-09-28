@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Domain code. No infrastructure dependencies: only the Microsoft.Extensions
+       options, configuration and DI abstractions (enforced by
+       tests/Freeside.Core.Tests/CoreDependencyTests.cs). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
+
+</Project>

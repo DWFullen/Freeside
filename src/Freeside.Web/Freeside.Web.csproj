@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Freeside.Core\Freeside.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -65,10 +65,11 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
   - `src/Freeside.Core`: domain code. It may reference only `Microsoft.Extensions` options, configuration and DI abstractions; an architecture test enforces this.
   - `src/Freeside.Web`: ASP.NET Core Razor Pages with `/healthz`.
   - `src/Freeside.Worker`: `BackgroundService` host.
-  - `tests/Freeside.{Core,Web,Worker}.Tests`: xUnit v3.
+  - `tests/Freeside.{Core,Web,Worker}.Tests`: xUnit v3 on Microsoft.Testing.Platform. `global.json` opts `dotnet test` into it, because the .NET 10 SDK no longer runs xUnit v3 4.x through VSTest.
   - `Freeside.slnx` ties them together.
 - **Build config:**
   - `Directory.Build.props`: nullable on, warnings as errors, `AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild`, deterministic builds, lock files.
+  - `.editorconfig`: an explicit `IDE1006` severity, so the existing `_camelCase` naming rule is enforced at build time (without it the rule is silently skipped).
   - `Directory.Packages.props` for central package management. `packages.lock.json` per project.
   - `nuget.config` clears inherited sources and maps every package to nuget.org.
   - `global.json` pins the exact SDK with `rollForward: latestPatch`.

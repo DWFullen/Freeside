@@ -2,7 +2,7 @@
 
 A DRM-free marketplace for games and other digital goods, paid in bitcoin. Buyers pay developers directly: no card network, processor or acquirer sits in a sale, so no payment intermediary decides which lawful games can be sold. Operated by Sprawl (legal entity name pending, D19).
 
-**Status:** pre-Phase 0. Documentation and decisions only; no application code yet.
+**Status:** Phase 0 in progress ([`docs/plans/phase-0.md`](docs/plans/phase-0.md)). The solution skeleton builds and tests; there are no product features yet.
 
 ## Where things are
 
@@ -14,6 +14,9 @@ A DRM-free marketplace for games and other digital goods, paid in bitcoin. Buyer
 | [`AGENTS.md`](AGENTS.md) | Baseline engineering rules for Bitcoin-accepting digital-goods apps | 4 |
 | [`CLAUDE.md`](CLAUDE.md) | Loads `AGENTS.md` and `project.md` into every Claude Code session | — |
 | [`tools/claude-cloud/setup.sh`](tools/claude-cloud/setup.sh) | Reviewed copy of the claude.ai/code cloud environment setup script | — |
+| [`docs/plans/`](docs/plans/) | Phase plans and the list of placeholders still to be supplied | — |
+| `src/` | `Freeside.Core` (domain, no infrastructure dependencies), `Freeside.Web` (ASP.NET Core, Razor Pages), `Freeside.Worker` (background jobs) | — |
+| `tests/` | xUnit v3 test projects, one per `src/` project | — |
 
 More specific layers override less specific ones. **Nothing overrides an `AGENTS.md` §2 or `project.md` §2 invariant except an accepted ADR that states the risk accepted.**
 
@@ -27,6 +30,31 @@ More specific layers override less specific ones. **Nothing overrides an `AGENTS
 | Hosting | Azure Container Apps (`web`, `worker`), Cloudflare R2 for artifacts | `project.md` §8, ADR 0004 |
 | IaC / CI | Terraform with Azure Verified Modules, GitHub Actions with OIDC | `project.md` §8, [ADR 0012](docs/adr/0012-terraform-avm-state-backend.md) |
 | Networks | regtest (local/CI) → signet (dev/UAT) → mainnet (prod only) | `AGENTS.md` §4.2, `project.md` §8.1 |
+
+## Build and test
+
+Needs the .NET SDK pinned in [`global.json`](global.json) (10.0.401, any later 10.0.4xx patch). These are the exact commands CI runs ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
+
+```sh
+dotnet restore --locked-mode
+dotnet build --no-restore -c Release
+dotnet test --no-build -c Release
+```
+
+- **Warnings are errors.** That includes the analyzers and the `.editorconfig` code-style and naming rules ([`Directory.Build.props`](Directory.Build.props)).
+- **Tests run on Microsoft.Testing.Platform** (xUnit v3), selected in `global.json`.
+- **Package versions live only in [`Directory.Packages.props`](Directory.Packages.props).** Every project commits a `packages.lock.json`. After adding or changing a package, refresh the lock files with `dotnet restore --force-evaluate` and commit them. `--locked-mode` fails if they are stale.
+
+### Run locally
+
+```sh
+dotnet run --project src/Freeside.Web      # http://localhost:5080, health check at /healthz
+dotnet run --project src/Freeside.Worker
+```
+
+The launch profiles set `Bitcoin__Network=regtest`.
+
+**`Bitcoin:Network` has no default** (`AGENTS.md` §2, invariant 4). Both hosts refuse to start if it is missing, or if it isn't exactly one of `regtest`, `signet`, `testnet4`, `mainnet`. They also refuse to start if a fake service (a stand-in listed in [`docs/plans/placeholders.md`](docs/plans/placeholders.md)) is registered on any network other than `regtest`.
 
 ## Working rules
 

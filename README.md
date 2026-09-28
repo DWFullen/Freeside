@@ -25,7 +25,7 @@ More specific layers override less specific ones. **Nothing overrides an `AGENTS
 | Data | PostgreSQL, `bigint` money columns, append-only ledger | `project.md` §8, `AGENTS.md` §2 |
 | Payments | Strike (default primary rail), BTCPay Server (xpub backups, platform fallback store), LUD-21 Lightning Address | `project.md` §4 |
 | Hosting | Azure Container Apps (`web`, `worker`), Cloudflare R2 for artifacts | `project.md` §8, ADR 0004 |
-| IaC / CI | Terraform/OpenTofu, GitHub Actions with OIDC | `project.md` §8 |
+| IaC / CI | Terraform with Azure Verified Modules, GitHub Actions with OIDC | `project.md` §8, [ADR 0012](docs/adr/0012-terraform-avm-state-backend.md) |
 | Networks | regtest (local/CI) → signet (dev/UAT) → mainnet (prod only) | `AGENTS.md` §4.2, `project.md` §8.1 |
 
 ## Working rules
@@ -37,7 +37,7 @@ More specific layers override less specific ones. **Nothing overrides an `AGENTS
 
 ## Next: Phase 0
 
-IaC (Azure + R2), CI/CD, regtest harness (BTCPay compose), auth (email + passkey), ledger schema, `IPaymentRail`. See `project.md` §10.
+IaC (Azure + R2), CI/CD, regtest harness (BTCPay compose), auth (email + passkey), ledger schema, `IPaymentRail`. See `project.md` §10. The PR-by-PR plan is [`docs/plans/phase-0.md`](docs/plans/phase-0.md); what is still stubbed out, and what you must supply to replace it, is in [`docs/plans/placeholders.md`](docs/plans/placeholders.md).
 
 ## License
 

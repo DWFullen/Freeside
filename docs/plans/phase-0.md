@@ -1,0 +1,244 @@
+# Phase 0 plan
+
+| Field | Value |
+|---|---|
+| Scope | `project.md` §10, Phase 0: IaC (Azure + R2), CI/CD, regtest harness, auth (email + passkey), ledger schema, `IPaymentRail` |
+| Status | Approved 2026-09-27. PR 0 and PR 1 in progress |
+| Related | [ADR 0012](../adr/0012-terraform-avm-state-backend.md), [`placeholders.md`](placeholders.md) |
+
+Every PR builds and passes its tests on its own. PRs land in order unless the dependency column allows otherwise.
+
+## Rules that apply to every PR
+
+- No secret values, cloud credentials or mainnet anything in the repo, in Terraform state, or in a Claude Code session. Nothing is applied to Azure or Cloudflare from a session.
+- **Placeholder policy.** Build everything that doesn't need an account or key we don't have yet.
+  - Each external service sits behind an interface in `Freeside.Core`. A `Fake` implementation serves local and CI; a real adapter is selected by configuration.
+  - Fakes are allowed only when `Bitcoin:Network=regtest`. Any other network with a fake registered fails at startup (`AGENTS.md` §2, invariants 4 and 15).
+  - Secrets are declared by name only: Key Vault secret names, empty entries in `.env.example`, `dotnet user-secrets` locally. ADR 0012 explains why a `sensitive` Terraform variable is not enough.
+  - Every stand-in is marked `PLACEHOLDER(<id>)` in code and listed in [`placeholders.md`](placeholders.md).
+- BTCPay is not a placeholder for dev and test: it runs on regtest in docker compose with throwaway keys.
+- Email goes through `IEmailSender`, with Mailpit in compose for local and CI.
+- Terraform follows ADR 0012.
+- If a PR needs a tool the cloud environment lacks, it updates `tools/claude-cloud/setup.sh`, and the change is re-pasted into the environment settings.
+- Problems outside a PR's scope are flagged in the PR, not fixed silently.
+
+## Decisions that refine the original request
+
+| # | Decision | Recorded in |
+|---|---|---|
+| R1 | Terraform AVM modules publish no `waf-aligned` examples (*Observed*). Each resource's reference is the module's most complete security example, the matching Bicep AVM `waf-aligned` test, and the Azure WAF service guide. Deviations are listed per environment in `infra/README.md` | ADR 0012 |
+| R2 | Two identities per environment: read-only `plan` (pull requests, `main`) and `apply` (GitHub Environment only). PR code never holds write credentials | ADR 0012 |
+| R3 | `apply` re-plans and aborts if the plan hash differs from the reviewed plan. Plan files never leave the runner | ADR 0012 |
+| R4 | The repo is public, so logs show only `address → action` summaries. No plans run for fork PRs | ADR 0012 |
+| R5 | An ops Key Vault (CI-readable, public endpoint, RBAC per secret) plus a private app Key Vault per environment | ADR 0012 |
+| R6 | Front Door Standard in dev (custom WAF rules, public origin, `X-Azure-FDID` check). Premium with managed rules and Private Link to Container Apps in uat and prod | `infra/README.md` (PR 8c) |
+| R7 | Private BTCPay (`AGENTS.md` §6.2 option 2). The app renders checkout itself because of the unified multi-rail QR | ADR 0013 (PR 8d) |
+| R8 | PR 8 is split into 8a–8d, and PR 10 is added for container images and deployment | This file |
+
+## PR sequence
+
+| PR | Title | Needs Docker | Depends on |
+|---|---|---|---|
+| 0 | Docs: ADR 0012, `project.md` §8, README, plans | no | — |
+| 1 | Solution skeleton + CI | no | 0 |
+| 2 | Supply chain | no | 1 |
+| 3 | Regtest harness + dockerd session hook | yes | 1 |
+| 4 | Data layer, money types, append-only ledger | yes (Testcontainers) | 1 |
+| 5 | Inbox/outbox + Postgres job queue | yes | 4 |
+| 6 | `IPaymentRail`, `RailSelector`, BTCPay adapter, fakes | yes | 3, 5 |
+| 7 | Auth: email login link + passkeys | yes | 5 |
+| 8a | Terraform bootstrap + Terraform CI + `setup.sh` | no | 2 |
+| 8b | Azure: network, observability, Key Vault, ACR, Postgres | no | 8a |
+| 8c | Azure: Container Apps, Front Door + WAF, quarantine storage + Defender | no | 8b |
+| 8d | Azure: BTCPay VM + Bastion, ADR 0013 | no | 8b |
+| 9 | Cloudflare R2 | no | 8a |
+| 10 | Container images, provenance, deploy + migration job | no | 1, 4, 8c |
+
+### PR 0: Docs
+- **Scope:** ADR 0012 and its index row. `project.md` §8 IaC row, the README stack table and ADR 0004 now say "Terraform (ADR 0012)". This file and `placeholders.md`.
+- **Tests:** none (docs only).
+- **Invariants:** 8, 14 (recorded).
+- **Outside the repo:** none.
+
+### PR 1: Solution skeleton + CI
+- **Projects:**
+  - `src/Freeside.Core`: domain code. It may reference only `Microsoft.Extensions` options, configuration and DI abstractions; an architecture test enforces this.
+  - `src/Freeside.Web`: ASP.NET Core Razor Pages with `/healthz`.
+  - `src/Freeside.Worker`: `BackgroundService` host.
+  - `tests/Freeside.{Core,Web,Worker}.Tests`: xUnit v3.
+  - `Freeside.slnx` ties them together.
+- **Build config:**
+  - `Directory.Build.props`: nullable on, warnings as errors, `AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild`, deterministic builds, lock files.
+  - `Directory.Packages.props` for central package management. `packages.lock.json` per project.
+  - `nuget.config` clears inherited sources and maps every package to nuget.org.
+  - `global.json` pins the exact SDK with `rollForward: latestPatch`.
+- **Network binding:** a required `Bitcoin:Network` (`regtest | signet | testnet4 | mainnet`) with no default. It is parsed strictly: exact lowercase only, and enum ordinals are rejected. It is validated at startup in both hosts.
+- **Fake guard:** fakes are registered only through `AddFake<TService, TFake>()` and implement `IFakeService`. Startup fails when the network isn't regtest and any fake is registered.
+- **CI:** `.github/workflows/ci.yml` runs build and test on `pull_request` and on push to `main`. Actions are pinned by full commit SHA; `permissions: contents: read`; `dotnet restore --locked-mode`.
+- **Tests:**
+  - Parser theory.
+  - Web and Worker hosts fail to start when the network is missing or invalid, and start on regtest and signet.
+  - `/healthz` returns 200.
+  - Fake guard: fakes are allowed on regtest and rejected on signet.
+  - Core dependency allowlist.
+  - Mainnet is parse-tested only.
+- **Invariants:** 4, 15.
+- **Outside the repo:** rename `master` → `main`. Add a ruleset on `main`: require a PR, require the `build-test` check, block force pushes.
+
+### PR 2: Supply chain
+- **Dependabot:** `nuget` (minor and patch grouped), `github-actions`, `terraform` (`/infra/**`, not grouped), `dotnet-sdk` (`global.json`).
+- **Workflows:** CodeQL (`csharp` with build-mode none, `actions`) and dependency review.
+- **Scripts:** `tools/ci/check-action-pins.sh` rejects any `uses:` that isn't a 40-character SHA. `tools/ci/check-placeholders.sh` requires `PLACEHOLDER(id)` in code and `placeholders.md` to match both ways. Both have fixture tests.
+- **README:** how to fix lock files on Dependabot PRs (dependabot-core #13950: `dotnet restore --force-evaluate`).
+- **Outside the repo:**
+  - Enable Dependabot alerts and security updates, secret scanning with push protection, and private vulnerability reporting.
+  - Keep code scanning "default setup" off.
+  - Turn on the Actions policy "require actions pinned to a full-length commit SHA".
+
+### PR 3: Regtest harness
+- **Compose file:** `tools/regtest/compose.yml` with every image pinned by digest: bitcoind (`btcpayserver/bitcoin`), NBXplorer, BTCPay Server, Postgres for BTCPay, Postgres for the app, Mailpit. Ports bind to 127.0.0.1 only.
+- **Commands:** `make regtest-up`, `make regtest-down` and `make regtest-test`.
+- **Smoke test** (`Category=Regtest`):
+  1. Create the first user, an API key and a store with a throwaway watch-only BIP84 xpub.
+  2. Create a BTC-denominated invoice (no rate source involved).
+  3. Assert the address starts with `bcrt1`.
+  4. Pay, mine one block, and wait for `Settled`.
+  5. A second invoice gets a fresh address.
+- **CI:** a `regtest` job.
+- **Session:**
+  - `.claude/settings.json` gets a SessionStart hook (`tools/claude-cloud/session-start.sh`) that starts dockerd when `CLAUDE_CODE_REMOTE=true`.
+  - `setup.sh` pre-pulls the pinned images.
+  - Dependabot gets the `docker-compose` ecosystem.
+- **Invariants:** 4, 8, 9.
+- **Outside the repo:** re-paste `setup.sh`.
+
+### PR 4: Data layer
+- **Projects:** `src/Freeside.Infrastructure` (EF Core + Npgsql) and Testcontainers tests.
+- **Money types** in Core: `Sats`, `MilliSats`, `Money` (minor units + ISO 4217), and `ExchangeRate` (decimal string, source, timestamp). Conversion uses integer rational arithmetic with named rounding rules. BannedApiAnalyzers bans `double`, `float` and `Half` in Core and Infrastructure.
+- **Append-only ledger enforced in the database:** triggers reject `UPDATE`, `DELETE` and `TRUNCATE`, and the app role holds only `SELECT, INSERT`.
+- **Migrations:** versioned EF Core migrations, never applied at app startup. CI runs `has-pending-model-changes`.
+- **Postgres auth:** password auth only on regtest; Entra managed identity everywhere else.
+- **Tests:** migrations apply to an empty database; ledger mutations are rejected; no floating-point columns; FsCheck property tests for conversion and rounding.
+- **Invariants:** 5, 7.
+
+### PR 5: Inbox/outbox + job queue
+- **Tables:** `inbox_messages` (unique `(source, dedupe_key)`), `outbox_messages`, `jobs`.
+- **Worker:** runners claim work with `FOR UPDATE SKIP LOCKED` and a lease. Retries back off exponentially, then go to a dead state.
+- **Tests:** concurrent runners process each job exactly once; an expired lease is reclaimed; retry and dead-letter; duplicate inbox inserts are ignored; an outbox row rolls back with its transaction.
+- **Invariants:** 6, 7.
+
+### PR 6: Rails + BTCPay adapter
+- **Core:** `IPaymentRail`, normalized invoice states and events, and a payment state machine per `AGENTS.md` §4.4. Backward transitions freeze and go to review.
+- **RailSelector skeleton:** priority per layer, circuit breaker, and the $10 on-chain minimum.
+- **Fakes:** `FakeStrikeRail` and `FakeFeeCollector` (`IFakeService`).
+- **BTCPay adapter:**
+  - Checks the HMAC over the raw body with a constant-time compare, and fails closed when no secret is configured.
+  - Persists to the inbox and acknowledges. The worker re-fetches the invoice before every transition; transitions are idempotent on `(invoiceId, targetState)`.
+- **Startup network check:** preview address prefixes are compared with `Bitcoin:Network`. A mismatch refuses to start. An unreachable BTCPay only opens the rail's breaker.
+- **Tests:**
+  - Contract tests per `AGENTS.md` §7.2: valid, bad signature, missing secret, replay, out of order, backward transition, tampered body.
+  - A regtest end-to-end test with a real webhook.
+- **Invariants:** 2, 3, 4, 6, 9, 15; P8.
+
+### PR 7: Auth
+- **Identity:** ASP.NET Core Identity on .NET 10, which has built-in passkeys (`MakePasskeyCreationOptionsAsync`, `PasskeySignInAsync`, …). No extra library. Our own Razor Pages under `/account` and a self-hosted `passkeys.js`.
+- **Email login link:**
+  - Single use, 15-minute TTL, stored as a hash.
+  - A GET shows a confirm button and a POST consumes the link, so link scanners can't use it up.
+  - Responses don't reveal whether an account exists; rate limits apply.
+  - Sent through the outbox.
+- **Hardening:**
+  - Strict CSP, HSTS, `Referrer-Policy: no-referrer`, `__Host-` cookies, antiforgery.
+  - Data Protection keys live in Postgres, protected by a Key Vault key outside regtest.
+- **Tests:** WebApplicationFactory + Testcontainers + Mailpit for the link flow. Playwright with a Chromium virtual authenticator for passkeys.
+- **Invariants:** 8, 10.
+
+### PR 8a: Terraform bootstrap + CI
+- **`infra/bootstrap`:**
+  - State storage account and ops Key Vault (AVM).
+  - Per environment: `plan` and `apply` identities (AVM UAMI with federated credentials), and resource groups `rg-freeside-<env>` and `rg-freeside-<env>-btcpay`.
+  - Role assignments.
+- **Shared config:** `infra/.tflint.hcl` and three-platform lock files.
+- **CI:** `.github/workflows/terraform.yml` per ADR 0012.
+- **setup.sh:** Terraform 1.16.4 from the HashiCorp apt repo.
+- **Outside the repo:**
+  - Re-paste `setup.sh`.
+  - Run the bootstrap locally as subscription Owner and migrate its state.
+  - Create GitHub Environments `dev`, `uat` and `prod`, with required reviewers on `uat` and `prod`.
+  - Set the variables the bootstrap outputs.
+
+### PR 8b: Azure core
+- **Layout:** `infra/modules/platform` and `infra/envs/{dev,uat,prod}`, with no `.tfvars`; environment differences live in `locals`.
+- **Network:** VNet, subnets, deny-by-default NSGs, private DNS zones.
+- **Observability:** Log Analytics and App Insights, with local auth disabled.
+- **App Key Vault:** RBAC, purge protection, private endpoint, and a Data Protection key.
+- **ACR:** admin disabled.
+- **Postgres Flexible Server:** Entra-only, private endpoint, PITR.
+- **Governance:** tags and budgets.
+
+### PR 8c: Azure edge and app
+- **Container Apps:** workload-profile environment, `web` and `worker` with user-assigned identities, and Key Vault secret references by name.
+- **Front Door + WAF:** per R6.
+- **Quarantine storage:** shared keys off, user-delegation SAS only, a public endpoint (developers upload directly), and Defender for Storage malware scanning on upload.
+- **App code:** the `X-Azure-FDID` check.
+
+### PR 8d: BTCPay VM + ADR 0013
+- **VM:** AVM VM with no public IP, SSH public key only, Entra SSH login, encryption at host.
+- **Bastion:** Developer SKU in dev, Basic in uat, Standard in prod.
+- **cloud-init:** `btcpayserver-docker` at a pinned commit, no Lightning, pruned node.
+- **NSG:** inbound only from the app subnet and Bastion; outbound P2P for the environment's network, plus 443.
+- **Runbook:** `docs/runbooks/btcpay-post-install.md`.
+
+### PR 9: Cloudflare R2
+- **Bucket:** one R2 bucket per environment in the same Terraform roots.
+- **CORS:** GET and HEAD from the canonical origin.
+- **Lifecycle:** only aborts incomplete multipart uploads. Nothing expires (P3).
+- **Immutability:** a bucket lock if the provider supports it.
+- **Credentials:** R2 S3 credentials are created outside Terraform.
+
+### PR 10: Images + deploy
+- **Images:** chiseled .NET 10 images pinned by digest.
+- **Build pipeline:** CycloneDX SBOM, `actions/attest-build-provenance`, push to ACR over OIDC.
+- **Deploy:** `terraform apply` with image digests.
+- **Migrations:** an EF migration bundle as a Container Apps Job under a migrator identity.
+
+## Phase 1: what can be built now, and what is blocked
+
+**Buildable with fakes and regtest:**
+- Catalog, storefronts, feed, search, product pages.
+- Checkout on the BTCPay regtest xpub rail plus `FakeStrikeRail`, the unified BIP21 QR, WebLN, failover and the circuit breaker.
+- The LUD-21 rail against a fake LNURL server.
+- Library, entitlements, guest claim tokens, library JSON export.
+- Payout destination onboarding (except the Nostr signature).
+- The fee account ledger, pause rules and debit scheduler against `FakeFeeCollector`.
+- Pool top-ups through the platform BTCPay store.
+- Refunds and SLA strikes, the developer dashboard.
+- Mature tagging, the adult holding queue and the self-attestation age gate.
+- US state/ZIP capture.
+- Reconciliation jobs.
+- Build upload to quarantine (Azurite) with a fake malware scanner.
+- Metadata curation checks, the DMCA workflow.
+
+**Blocked:**
+
+| Decision | Blocks |
+|---|---|
+| D8 | Real Strike adapter, the directed-invoice guard against the real API, Strike top-ups and treasury |
+| D12 | Real ACH adapter, bank linking, mandate text, return webhooks |
+| D16 | Payout config signing, NIP-05 pinning, relay commitments, the P4 signature check at checkout |
+| D17 | Opening developer onboarding |
+| D18 | Passkey RP ID, Lightning Login host, email domain, Front Door domain, CORS origin |
+| Not yet raised as decisions | Rate source (Q10), receipt signing key type (Q11), manifest signing scheme, sanctions screening source, CSAM hash-matching vendor, IP geolocation provider, the DRM-free VM check (*Hypothesis*: needs a prototype) |
+
+## Open questions
+
+| # | Question | Needed by |
+|---|---|---|
+| Q5 | Log Analytics and App Insights keys land in state through azurerm. Is it acceptable once local auth is disabled (the default plan), or should those two use azapi instead of AVM? | PR 8b |
+| Q7 | Per-developer BTCPay webhook secrets: one Key Vault secret each, or envelope encryption in Postgres with a Key Vault key (*Recommendation*: envelope encryption, recorded in an ADR) | Phase 1 onboarding |
+| Q8 | One subscription per environment, or one subscription with separate resource groups. Region *Default*: `eastus2` | PR 8a |
+| Q9 | Which Postgres major version Azure Flexible Server offers as GA ⏱. Local compose and Testcontainers match it | PR 3 |
+| Q10 | Rate source (`AGENTS.md` §4.3). Strike quotes its own rate | Phase 1 checkout |
+| Q11 | Azure Key Vault holds no Ed25519 keys (*Inferred*). Keep Ed25519 receipts with the key in app memory, or switch to ECDSA P-256 signed inside Key Vault | Phase 1 receipts |
+| Q12 | Budget amounts per environment. *Default:* dev $150/month, uat $300/month | PR 8b |
+| — | *Recommendation:* the passkey RP ID is as permanent as the Lightning Login host. Add it to ADR 0011 when D18 is decided | D18 |

@@ -347,7 +347,7 @@ The user's direction: self-serve, judged automatically against platform standard
 | Rail adapters | A `IPaymentRail` interface with implementations `StrikeDirected` (primary), `BtcpayOnchain` and `LnurlVerify` (backups), later `Nwc`. A `RailSelector` applies priority and circuit-breaker state per developer | Each emits normalized invoice events into the inbox. Failover switches are ledger rows |
 | Artifact storage and delivery | **Cloudflare R2** (zero egress, `AGENTS.md` §5.3) with presigned GET URLs minted after the entitlement check | The platform pays for downloads out of its fee share. With zero egress that stays viable |
 | Upload and quarantine | The developer uploads to an Azure Blob quarantine container → Defender for Storage malware scan → manifest check → promoted to R2 at a content-addressed path | Costs one Azure egress per build, not per download |
-| IaC | **Terraform/OpenTofu** (Azure and Cloudflare in one deployment, `AGENTS.md` §6.1) | |
+| IaC | **Terraform** with Azure Verified Modules (Azure and Cloudflare in one deployment, `AGENTS.md` §6.1) | ADR 0012: exact version pins, Entra-only state backend, no secret values in state |
 | CI/CD | *Default:* GitHub Actions with OIDC to Azure | |
 | Testing | xUnit, Testcontainers (Postgres), BTCPay regtest compose, Playwright for .NET | Rail contract tests for each adapter. Strike tested with mocks; check whether Strike has a sandbox (§9) |
 

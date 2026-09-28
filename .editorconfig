@@ -43,6 +43,12 @@ dotnet_naming_symbols.private_fields.applicable_kinds = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 dotnet_naming_style.underscore_camel.capitalization = camel_case
 dotnet_naming_style.underscore_camel.required_prefix = _
+# Naming rules are only enforced at build time when IDE1006 has an explicit severity.
+dotnet_diagnostic.IDE1006.severity = warning
 
 # Money paths: floating point is banned (AGENTS.md §2, invariant 5).
 # Enforce with an analyzer in Phase 0; this file cannot express it.
+
+[tests/**.cs]
+# Test names read as sentences (Host_refuses_to_start_when_...).
+dotnet_diagnostic.CA1707.severity = none

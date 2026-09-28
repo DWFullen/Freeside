@@ -15,7 +15,7 @@ _To be written._
 
 ## Decision
 
-Store and deliver build artifacts from Cloudflare R2, using presigned GET URLs minted after the entitlement check. Developer uploads land in an Azure Blob quarantine container, pass Defender for Storage malware scanning and manifest verification, and are then promoted to R2 at a content-addressed path. Azure and Cloudflare resources are managed in one Terraform/OpenTofu deployment.
+Store and deliver build artifacts from Cloudflare R2, using presigned GET URLs minted after the entitlement check. Developer uploads land in an Azure Blob quarantine container, pass Defender for Storage malware scanning and manifest verification, and are then promoted to R2 at a content-addressed path. Azure and Cloudflare resources are managed in one Terraform deployment (ADR 0012).
 
 ## Options considered
 

@@ -22,3 +22,4 @@ Rules:
 | [0009](0009-no-adult-titles-at-launch.md) | No adult titles at launch: exit criteria and review date | Proposed | — |
 | [0010](0010-payout-config-signing-nostr.md) | Payout config signing with Nostr keys pinned by NIP-05 | Proposed | — |
 | [0011](0011-account-authenticator-model.md) | Account and authenticator model, and the permanent Lightning Login host | Proposed | — |
+| [0012](0012-terraform-avm-state-backend.md) | Terraform with Azure Verified Modules, the state backend, and secrets kept out of state | Accepted | — |

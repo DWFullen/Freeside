@@ -27,6 +27,10 @@ expect 1 check-action-pins.sh "$fixtures/pins/short-sha.workflow"
 expect 1 check-action-pins.sh "$fixtures/pins/no-comment.workflow"
 expect 1 check-action-pins.sh "$fixtures/pins/docker-tag.workflow"
 
+expect 0 check-image-pins.sh "$fixtures/images/pass.compose"
+expect 1 check-image-pins.sh "$fixtures/images/tag-only.compose"
+expect 1 check-image-pins.sh "$fixtures/images/digest-only.compose"
+
 expect 0 check-placeholders.sh "$fixtures/placeholders/pass"
 expect 1 check-placeholders.sh "$fixtures/placeholders/unlisted"
 expect 1 check-placeholders.sh "$fixtures/placeholders/stale-yes"

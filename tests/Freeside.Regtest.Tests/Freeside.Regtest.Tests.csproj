@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Runs against the stack in tools/regtest/compose.yml: `make regtest-up`,
+       then `make regtest-test`. Every test here carries Category=Regtest, which
+       the unit test run in CI filters out. -->
+  <PropertyGroup>
+    <!-- Under the unit run's filter this project runs zero tests, which
+         Microsoft.Testing.Platform reports as exit code 8. -->
+    <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --ignore-exit-code 8</TestingPlatformCommandLineArguments>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BTCPayServer.Client" />
+    <PackageReference Include="NBitcoin" />
+  </ItemGroup>
+
+</Project>

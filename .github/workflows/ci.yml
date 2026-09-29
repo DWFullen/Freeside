@@ -38,8 +38,42 @@ jobs:
       - name: Build
         run: dotnet build --no-restore -c Release
 
+      # Regtest tests need the docker stack; the regtest job runs them.
       - name: Test
-        run: dotnet test --no-build -c Release
+        run: dotnet test --no-build -c Release --filter-not-trait "Category=Regtest"
+
+  regtest:
+    name: regtest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET SDK from global.json
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore (locked)
+        run: dotnet restore --locked-mode
+
+      - name: Start the regtest stack
+        run: make regtest-up
+
+      - name: Smoke test
+        run: make regtest-test
+
+      # Regtest only: nothing in these logs is real (throwaway xpub, addresses, coins).
+      - name: Stack logs
+        if: failure()
+        run: docker compose -f tools/regtest/compose.yml logs --no-color --tail 200
+
+      - name: Stop the regtest stack
+        if: always()
+        run: make regtest-down
 
   repo-checks:
     name: repo-checks
@@ -53,10 +87,13 @@ jobs:
 
       # shellcheck is preinstalled on GitHub's Ubuntu runners.
       - name: Shellcheck
-        run: shellcheck tools/ci/*.sh tools/ci/tests/*.sh tools/claude-cloud/*.sh
+        run: shellcheck tools/ci/*.sh tools/ci/tests/*.sh tools/claude-cloud/*.sh tools/regtest/*.sh
 
       - name: Actions pinned by commit SHA
         run: tools/ci/check-action-pins.sh
+
+      - name: Compose images pinned by digest
+        run: tools/ci/check-image-pins.sh
 
       - name: Placeholders match docs/plans/placeholders.md
         run: tools/ci/check-placeholders.sh

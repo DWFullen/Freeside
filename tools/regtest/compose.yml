@@ -1,0 +1,133 @@
+# Local and CI regtest stack (docs/plans/phase-0.md, PR 3).
+#
+#   make regtest-up     start, mine 101 blocks, wait until BTCPay is synced
+#   make regtest-test   run the smoke test (tests/Freeside.Regtest.Tests)
+#   make regtest-down   stop and delete every volume
+#
+# Regtest only (AGENTS.md §2, invariant 4). Every credential below is a
+# throwaway for this network and must never be reused anywhere else. Ports are
+# published on 127.0.0.1 only; NBXplorer and BTCPay's Postgres aren't published.
+#
+# Images are pinned by tag and digest (AGENTS.md §7.4); Dependabot updates
+# both. The BTCPay stack (bitcoind, NBXplorer, BTCPay, BTCPay's Postgres)
+# follows btcpayserver-docker at commit dc5f84d1, the deployment the
+# production VM uses (PR 8d), so bump those four together. The app's Postgres
+# matches the newest major Azure Database for PostgreSQL Flexible Server
+# offers as GA (#13).
+
+name: freeside-regtest
+
+services:
+  bitcoind:
+    image: btcpayserver/bitcoin:31.1-1@sha256:b7fe7d0c6a0db6114d29921644bd1be8fc0efbc4abef04b1caf2242cc416c31d
+    environment:
+      BITCOIN_NETWORK: regtest
+      # Creates a "default" wallet the smoke test pays from. Regtest coins only.
+      BITCOIN_WALLETDIR: /walletdata
+      # fallbackfee: regtest has no fee estimates, so sendtoaddress needs one.
+      BITCOIN_EXTRA_ARGS: |
+        rpcport=43782
+        rpcbind=0.0.0.0:43782
+        rpcallowip=0.0.0.0/0
+        rpcuser=freeside
+        rpcpassword=regtest-throwaway
+        port=39388
+        whitelist=0.0.0.0/0
+        fallbackfee=0.0002
+    ports:
+      - "127.0.0.1:43782:43782"
+    healthcheck:
+      test: ["CMD", "bitcoin-cli", "-datadir=/data", "getblockchaininfo"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - bitcoin_datadir:/data
+      - bitcoin_walletdir:/walletdata
+
+  btcpay-postgres:
+    image: btcpayserver/postgres:18.6@sha256:4f9632f312190f6fcd580bb71f463637c6eab6f1fc548a3c6460c9c934deafca
+    environment:
+      # Not published to the host; only NBXplorer and BTCPay reach it.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    # Durability off: this data is thrown away (same flags as BTCPay's tests).
+    command: ["-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - btcpay_postgres_datadir:/var/lib/postgresql
+
+  nbxplorer:
+    image: nicolasdorier/nbxplorer:2.6.18@sha256:b2bb3c74b7407649f8d2efac700f2e137ab407fa49828b246fa6968489c9f3ad
+    environment:
+      NBXPLORER_NETWORK: regtest
+      NBXPLORER_CHAINS: btc
+      NBXPLORER_BIND: 0.0.0.0:32838
+      NBXPLORER_BTCRPCURL: http://bitcoind:43782/
+      NBXPLORER_BTCNODEENDPOINT: bitcoind:39388
+      NBXPLORER_BTCRPCUSER: freeside
+      NBXPLORER_BTCRPCPASSWORD: regtest-throwaway
+      NBXPLORER_POSTGRES: User ID=postgres;Host=btcpay-postgres;Port=5432;Application Name=nbxplorer;Database=nbxplorer
+      # Not published to the host; only BTCPay reaches it.
+      NBXPLORER_NOAUTH: 1
+      # up.sh mines the first blocks itself, so the chain doesn't depend on
+      # which of the two gets there first.
+      NBXPLORER_NOWARMUP: 1
+    depends_on:
+      bitcoind:
+        condition: service_healthy
+      btcpay-postgres:
+        condition: service_healthy
+
+  btcpay:
+    image: btcpayserver/btcpayserver:2.4.4@sha256:c264aa08cd32a469bd30d41978b73dc8bb2de1503ce67bdb0ab8fd5d934fb614
+    environment:
+      BTCPAY_NETWORK: regtest
+      BTCPAY_BIND: 0.0.0.0:49392
+      BTCPAY_CHAINS: btc
+      BTCPAY_BTCEXPLORERURL: http://nbxplorer:32838/
+      BTCPAY_POSTGRES: User ID=postgres;Host=btcpay-postgres;Port=5432;Application Name=btcpayserver;Database=btcpayserver
+      BTCPAY_EXPLORERPOSTGRES: User ID=postgres;Host=btcpay-postgres;Port=5432;Application Name=btcpayserver;Database=nbxplorer
+    ports:
+      - "127.0.0.1:49392:49392"
+    depends_on:
+      - nbxplorer
+    volumes:
+      - btcpay_datadir:/datadir
+
+  # The app's own database. Never shared with BTCPay (AGENTS.md §6.1).
+  app-postgres:
+    image: postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    environment:
+      POSTGRES_USER: freeside
+      POSTGRES_PASSWORD: regtest-throwaway
+      POSTGRES_DB: freeside
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "freeside", "-d", "freeside"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - app_postgres_datadir:/var/lib/postgresql
+
+  # SMTP sink for IEmailSender (PR 7). UI at http://127.0.0.1:8025.
+  mailpit:
+    image: axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
+volumes:
+  bitcoin_datadir:
+  bitcoin_walletdir:
+  btcpay_postgres_datadir:
+  btcpay_datadir:
+  app_postgres_datadir:

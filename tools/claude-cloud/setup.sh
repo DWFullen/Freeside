@@ -39,11 +39,14 @@
 #   pin; this script follows it). Falls back to the latest 10.0 SDK if the repo
 #   isn't cloned yet when the script runs.
 # - shellcheck, for the repo checks (tools/ci). Best effort: CI runs it anyway.
+# - The regtest stack's images (tools/regtest/compose.yml), pulled into the
+#   cached snapshot so `make regtest-up` doesn't download them. Best effort.
+#   dockerd isn't running while this script runs, so the script starts it for
+#   the pull and stops it again. In each session, the SessionStart hook in
+#   .claude/settings.json (tools/claude-cloud/session-start.sh) starts it.
+#   Both steps need the repo on disk; without it they are skipped.
 #
 # Phase 0 additions still to come (docs/plans/phase-0.md):
-# - PR 3: `docker compose -f <regtest compose file> pull` so BTCPay regtest
-#   images are cached. dockerd itself is started per session by a SessionStart
-#   hook in .claude/settings.json, gated on CLAUDE_CODE_REMOTE=true.
 # - PR 8a: Terraform from the HashiCorp apt repository (ADR 0012).
 
 set -euo pipefail
@@ -51,15 +54,20 @@ set -euo pipefail
 DOTNET_ROOT=/usr/share/dotnet
 DOTNET_CHANNEL=10.0
 
-# The SDK version pinned in global.json ("sdk": { "version": ... }), if the repo
-# is already on disk.
-sdk_version=""
+# The repo, if it is already on disk.
+repo_dir=""
 for dir in "${CLAUDE_PROJECT_DIR:-}" "$PWD" /home/user/Freeside; do
   if [ -n "$dir" ] && [ -f "$dir/global.json" ]; then
-    sdk_version="$(sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$dir/global.json" | head -n 1)"
+    repo_dir="$dir"
     break
   fi
 done
+
+# The SDK version pinned in global.json ("sdk": { "version": ... }).
+sdk_version=""
+if [ -n "$repo_dir" ]; then
+  sdk_version="$(sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$repo_dir/global.json" | head -n 1)"
+fi
 
 installed_sdks="$("$DOTNET_ROOT/dotnet" --list-sdks 2>/dev/null || true)"
 install_args=()
@@ -80,4 +88,25 @@ dotnet --list-sdks
 if ! command -v shellcheck >/dev/null 2>&1; then
   { apt-get update -qq && apt-get install -y -qq shellcheck; } \
     || echo "warning: shellcheck not installed; the repo-checks CI job still runs it"
+fi
+
+compose_file="$repo_dir/tools/regtest/compose.yml"
+if [ -n "$repo_dir" ] && [ -f "$compose_file" ] && command -v dockerd >/dev/null 2>&1; then
+  dockerd_pid=""
+  if ! docker info >/dev/null 2>&1; then
+    dockerd >/tmp/dockerd-setup.log 2>&1 </dev/null &
+    dockerd_pid=$!
+    for _ in $(seq 1 30); do
+      docker info >/dev/null 2>&1 && break
+      sleep 1
+    done
+  fi
+  docker compose -f "$compose_file" pull --quiet \
+    || echo "warning: regtest images not pre-pulled; make regtest-up will pull them"
+  if [ -n "$dockerd_pid" ]; then
+    kill "$dockerd_pid" 2>/dev/null || true
+    wait "$dockerd_pid" 2>/dev/null || true
+  fi
+else
+  echo "warning: regtest images not pre-pulled (no repo checkout or no dockerd)"
 fi

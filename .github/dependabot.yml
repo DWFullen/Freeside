@@ -1,8 +1,8 @@
 # Dependabot version updates (AGENTS.md §7.4).
 # - New releases wait 7 days (cooldown) before Dependabot proposes them: most
 #   compromised releases are pulled within days. Security updates skip the wait.
-# - Terraform (/infra) and docker-compose (regtest harness) are added by the PRs
-#   that create those directories (Phase 0 PR 8a and PR 3).
+# - Terraform (/infra) is added by the PR that creates that directory (Phase 0
+#   PR 8a).
 # - NuGet PRs may need their lock files refreshed; see README, "Dependabot PRs".
 version: 2
 updates:
@@ -38,4 +38,23 @@ updates:
       default-days: 7
     ignore:
       - dependency-name: "*"
+        update-types: [version-update:semver-major]
+
+  # tools/regtest/compose.yml: images pinned as tag@digest; both are updated.
+  # The BTCPay stack follows btcpayserver-docker, so its images come in one PR
+  # to check against that repo. A Postgres major is a decision (#13), not a bump.
+  - package-ecosystem: docker-compose
+    directory: "/tools/regtest"
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      btcpay-stack:
+        patterns: ["btcpayserver/*", "nicolasdorier/nbxplorer"]
+    ignore:
+      - dependency-name: "postgres"
+        update-types: [version-update:semver-major]
+      - dependency-name: "btcpayserver/postgres"
         update-types: [version-update:semver-major]

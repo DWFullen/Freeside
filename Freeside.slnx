@@ -6,6 +6,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Freeside.Core.Tests/Freeside.Core.Tests.csproj" />
+    <Project Path="tests/Freeside.Regtest.Tests/Freeside.Regtest.Tests.csproj" />
     <Project Path="tests/Freeside.Web.Tests/Freeside.Web.Tests.csproj" />
     <Project Path="tests/Freeside.Worker.Tests/Freeside.Worker.Tests.csproj" />
   </Folder>

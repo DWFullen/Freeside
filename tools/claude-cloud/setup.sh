@@ -33,21 +33,51 @@
 # - GitHub Release downloads from repos not attached to the session get 403
 #   from the GitHub proxy. Install tools from vendor hosts or apt repos.
 #
-# Phase 0 additions (not yet present):
-# - `docker compose -f <regtest compose file> pull` so BTCPay regtest images
-#   are cached. Start the stack per session from a SessionStart hook in
-#   .claude/settings.json, gated on CLAUDE_CODE_REMOTE=true.
-# - OpenTofu, from its apt repository (add the host to the network list).
+# What it installs
+# ----------------
+# - The .NET SDK version pinned in the repo's global.json (Dependabot bumps the
+#   pin; this script follows it). Falls back to the latest 10.0 SDK if the repo
+#   isn't cloned yet when the script runs.
+# - shellcheck, for the repo checks (tools/ci). Best effort: CI runs it anyway.
+#
+# Phase 0 additions still to come (docs/plans/phase-0.md):
+# - PR 3: `docker compose -f <regtest compose file> pull` so BTCPay regtest
+#   images are cached. dockerd itself is started per session by a SessionStart
+#   hook in .claude/settings.json, gated on CLAUDE_CODE_REMOTE=true.
+# - PR 8a: Terraform from the HashiCorp apt repository (ADR 0012).
 
 set -euo pipefail
 
 DOTNET_ROOT=/usr/share/dotnet
 DOTNET_CHANNEL=10.0
 
-if ! "$DOTNET_ROOT/dotnet" --list-sdks 2>/dev/null | grep -q "^${DOTNET_CHANNEL%%.*}\."; then
+# The SDK version pinned in global.json ("sdk": { "version": ... }), if the repo
+# is already on disk.
+sdk_version=""
+for dir in "${CLAUDE_PROJECT_DIR:-}" "$PWD" /home/user/Freeside; do
+  if [ -n "$dir" ] && [ -f "$dir/global.json" ]; then
+    sdk_version="$(sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$dir/global.json" | head -n 1)"
+    break
+  fi
+done
+
+installed_sdks="$("$DOTNET_ROOT/dotnet" --list-sdks 2>/dev/null || true)"
+install_args=()
+if [ -n "$sdk_version" ]; then
+  grep -qF "$sdk_version [" <<<"$installed_sdks" || install_args=(--version "$sdk_version")
+else
+  grep -q "^${DOTNET_CHANNEL%%.*}\." <<<"$installed_sdks" || install_args=(--channel "$DOTNET_CHANNEL")
+fi
+
+if [ "${#install_args[@]}" -gt 0 ]; then
   curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-  bash /tmp/dotnet-install.sh --channel "$DOTNET_CHANNEL" --install-dir "$DOTNET_ROOT"
+  bash /tmp/dotnet-install.sh "${install_args[@]}" --install-dir "$DOTNET_ROOT"
 fi
 
 ln -sf "$DOTNET_ROOT/dotnet" /usr/local/bin/dotnet
 dotnet --list-sdks
+
+if ! command -v shellcheck >/dev/null 2>&1; then
+  { apt-get update -qq && apt-get install -y -qq shellcheck; } \
+    || echo "warning: shellcheck not installed; the repo-checks CI job still runs it"
+fi

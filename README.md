@@ -56,6 +56,31 @@ The launch profiles set `Bitcoin__Network=regtest`.
 
 **`Bitcoin:Network` has no default** (`AGENTS.md` §2, invariant 4). Both hosts refuse to start if it is missing, or if it isn't exactly one of `regtest`, `signet`, `testnet4`, `mainnet`. They also refuse to start if a fake service (a stand-in listed in [`docs/plans/placeholders.md`](docs/plans/placeholders.md)) is registered on any network other than `regtest`.
 
+### Repo checks
+
+The `repo-checks` CI job runs these. They need only bash (and shellcheck):
+
+```sh
+tools/ci/check-action-pins.sh     # every workflow `uses:` is pinned to a full commit SHA with a `# vX.Y.Z` comment
+tools/ci/check-placeholders.sh    # PLACEHOLDER(<id>) markers in code match docs/plans/placeholders.md
+tools/ci/tests/run.sh             # fixture tests for both scripts
+shellcheck tools/ci/*.sh tools/ci/tests/*.sh tools/claude-cloud/*.sh
+```
+
+CodeQL (C# and GitHub Actions) and dependency review run as their own workflows on every pull request.
+
+### Dependabot PRs and lock files
+
+[Dependabot](.github/dependabot.yml) proposes weekly updates for NuGet packages, GitHub Actions and the SDK in `global.json`. It waits 7 days after each release; security updates skip the wait.
+
+A NuGet update can leave `packages.lock.json` stale in projects that reference the updated project ([dependabot-core #13950](https://github.com/dependabot/dependabot-core/issues/13950)). CI's `--locked-mode` restore then fails with `NU1004`. To fix it, check out the Dependabot branch, then run:
+
+```sh
+dotnet restore --force-evaluate
+```
+
+Commit the changed lock files to the same branch.
+
 ## Working rules
 
 - `main` is protected. Every change lands through a PR with green CI.

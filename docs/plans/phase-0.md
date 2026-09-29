@@ -3,8 +3,9 @@
 | Field | Value |
 |---|---|
 | Scope | `project.md` §10, Phase 0: IaC (Azure + R2), CI/CD, regtest harness, auth (email + passkey), ledger schema, `IPaymentRail` |
-| Status | Approved 2026-09-27. PR 0 and PR 1 in progress |
+| Status | Approved 2026-09-27. PR 0 and PR 1 merged in #1 (2026-09-28). PR 2 in progress |
 | Related | [ADR 0012](../adr/0012-terraform-avm-state-backend.md), [`placeholders.md`](placeholders.md) |
+| Tracking | GitHub issues: [#22 Phase 0](https://github.com/DWFullen/Freeside/issues/22), [#2 Open decisions](https://github.com/DWFullen/Freeside/issues/2), [#23 ADRs](https://github.com/DWFullen/Freeside/issues/23), [#24 Phase 1](https://github.com/DWFullen/Freeside/issues/24). Each PR below has its own issue |
 
 Every PR builds and passes its tests on its own. PRs land in order unless the dependency column allows otherwise.
 
@@ -37,22 +38,22 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 
 ## PR sequence
 
-| PR | Title | Needs Docker | Depends on |
-|---|---|---|---|
-| 0 | Docs: ADR 0012, `project.md` §8, README, plans | no | — |
-| 1 | Solution skeleton + CI | no | 0 |
-| 2 | Supply chain | no | 1 |
-| 3 | Regtest harness + dockerd session hook | yes | 1 |
-| 4 | Data layer, money types, append-only ledger | yes (Testcontainers) | 1 |
-| 5 | Inbox/outbox + Postgres job queue | yes | 4 |
-| 6 | `IPaymentRail`, `RailSelector`, BTCPay adapter, fakes | yes | 3, 5 |
-| 7 | Auth: email login link + passkeys | yes | 5 |
-| 8a | Terraform bootstrap + Terraform CI + `setup.sh` | no | 2 |
-| 8b | Azure: network, observability, Key Vault, ACR, Postgres | no | 8a |
-| 8c | Azure: Container Apps, Front Door + WAF, quarantine storage + Defender | no | 8b |
-| 8d | Azure: BTCPay VM + Bastion, ADR 0013 | no | 8b |
-| 9 | Cloudflare R2 | no | 8a |
-| 10 | Container images, provenance, deploy + migration job | no | 1, 4, 8c |
+| PR | Issue | Title | Needs Docker | Depends on | Status |
+|---|---|---|---|---|---|
+| 0 | [#28](https://github.com/DWFullen/Freeside/issues/28) | Docs: ADR 0012, `project.md` §8, README, plans | no | — | Done ([#1](https://github.com/DWFullen/Freeside/pull/1)) |
+| 1 | [#29](https://github.com/DWFullen/Freeside/issues/29) | Solution skeleton + CI | no | 0 | Done ([#1](https://github.com/DWFullen/Freeside/pull/1)) |
+| 2 | [#27](https://github.com/DWFullen/Freeside/issues/27) | Supply chain | no | 1 | In progress |
+| 3 | [#30](https://github.com/DWFullen/Freeside/issues/30) | Regtest harness + dockerd session hook | yes | 1 | Planned |
+| 4 | [#31](https://github.com/DWFullen/Freeside/issues/31) | Data layer, money types, append-only ledger | yes (Testcontainers) | 1 | Planned |
+| 5 | [#32](https://github.com/DWFullen/Freeside/issues/32) | Inbox/outbox + Postgres job queue | yes | 4 | Planned |
+| 6 | [#33](https://github.com/DWFullen/Freeside/issues/33) | `IPaymentRail`, `RailSelector`, BTCPay adapter, fakes | yes | 3, 5 | Planned |
+| 7 | [#34](https://github.com/DWFullen/Freeside/issues/34) | Auth: email login link + passkeys | yes | 5 | Planned |
+| 8a | [#35](https://github.com/DWFullen/Freeside/issues/35) | Terraform bootstrap + Terraform CI + `setup.sh` | no | 2 | Planned |
+| 8b | [#36](https://github.com/DWFullen/Freeside/issues/36) | Azure: network, observability, Key Vault, ACR, Postgres | no | 8a | Planned |
+| 8c | [#37](https://github.com/DWFullen/Freeside/issues/37) | Azure: Container Apps, Front Door + WAF, quarantine storage + Defender | no | 8b | Planned |
+| 8d | [#38](https://github.com/DWFullen/Freeside/issues/38) | Azure: BTCPay VM + Bastion, ADR 0013 | no | 8b | Planned |
+| 9 | [#39](https://github.com/DWFullen/Freeside/issues/39) | Cloudflare R2 | no | 8a | Planned |
+| 10 | [#40](https://github.com/DWFullen/Freeside/issues/40) | Container images, provenance, deploy + migration job | no | 1, 4, 8c | Planned |
 
 ### PR 0: Docs
 - **Scope:** ADR 0012 and its index row. `project.md` §8 IaC row, the README stack table and ADR 0004 now say "Terraform (ADR 0012)". This file and `placeholders.md`.
@@ -87,14 +88,30 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 - **Outside the repo:** rename `master` → `main`. Add a ruleset on `main`: require a PR, require the `build-test` check, block force pushes.
 
 ### PR 2: Supply chain
-- **Dependabot:** `nuget` (minor and patch grouped), `github-actions`, `terraform` (`/infra/**`, not grouped), `dotnet-sdk` (`global.json`).
-- **Workflows:** CodeQL (`csharp` with build-mode none, `actions`) and dependency review.
-- **Scripts:** `tools/ci/check-action-pins.sh` rejects any `uses:` that isn't a 40-character SHA. `tools/ci/check-placeholders.sh` requires `PLACEHOLDER(id)` in code and `placeholders.md` to match both ways. Both have fixture tests.
-- **README:** how to fix lock files on Dependabot PRs (dependabot-core #13950: `dotnet restore --force-evaluate`).
-- **Outside the repo:**
+- **Dependabot** (`.github/dependabot.yml`), weekly, with a 7-day cooldown on new releases (security updates skip it):
+  - `nuget`: minor and patch grouped, majors separate.
+  - `github-actions`: grouped. Updates move the SHA and its `# vX.Y.Z` comment together.
+  - `dotnet-sdk` (`global.json`): semver-major ignored, since a new SDK major is a decision.
+  - `terraform` moves to PR 8a and `docker-compose` to PR 3. Those directories don't exist yet, and an empty directory makes Dependabot error.
+- **Workflows:**
+  - CodeQL: `csharp` with build-mode none, and `actions`, both with `security-extended` queries.
+  - Dependency review, failing on moderate-or-worse vulnerabilities.
+
+  Both need the repository to be public (#9).
+- **Repo checks** (`repo-checks` job in `ci.yml`):
+  - `tools/ci/check-action-pins.sh`: every `uses:` must be a 40-character commit SHA with a `# vX.Y.Z` comment, a local action, or a digest-pinned docker image.
+  - `tools/ci/check-placeholders.sh`: `PLACEHOLDER(id)` in code must match `placeholders.md` both ways, using its "In code" column.
+  - Fixture tests (`tools/ci/tests/run.sh`).
+  - shellcheck.
+- **setup.sh:** installs the exact SDK version pinned in `global.json`, falling back to the 10.0 channel. Installs shellcheck.
+- **README:** repo checks, and how to fix lock files on Dependabot PRs (dependabot-core #13950: `dotnet restore --force-evaluate`).
+- **Outside the repo** ([#42](https://github.com/DWFullen/Freeside/issues/42), [#41](https://github.com/DWFullen/Freeside/issues/41)):
+  - Make the repository public (decision #9).
   - Enable Dependabot alerts and security updates, secret scanning with push protection, and private vulnerability reporting.
   - Keep code scanning "default setup" off.
   - Turn on the Actions policy "require actions pinned to a full-length commit SHA".
+  - Add `repo-checks`, CodeQL and dependency review to the required checks on `main`.
+  - Re-paste `setup.sh`.
 
 ### PR 3: Regtest harness
 - **Compose file:** `tools/regtest/compose.yml` with every image pinned by digest: bitcoind (`btcpayserver/bitcoin`), NBXplorer, BTCPay Server, Postgres for BTCPay, Postgres for the app, Mailpit. Ports bind to 127.0.0.1 only.
@@ -162,6 +179,7 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 - **Shared config:** `infra/.tflint.hcl` and three-platform lock files.
 - **CI:** `.github/workflows/terraform.yml` per ADR 0012.
 - **setup.sh:** Terraform 1.16.4 from the HashiCorp apt repo.
+- **Dependabot:** add the `terraform` ecosystem for `/infra/**`, not grouped.
 - **Outside the repo:**
   - Re-paste `setup.sh`.
   - Run the bootstrap locally as subscription Owner and migrate its state.
@@ -233,13 +251,14 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 
 ## Open questions
 
-| # | Question | Needed by |
-|---|---|---|
-| Q5 | Log Analytics and App Insights keys land in state through azurerm. Is it acceptable once local auth is disabled (the default plan), or should those two use azapi instead of AVM? | PR 8b |
-| Q7 | Per-developer BTCPay webhook secrets: one Key Vault secret each, or envelope encryption in Postgres with a Key Vault key (*Recommendation*: envelope encryption, recorded in an ADR) | Phase 1 onboarding |
-| Q8 | One subscription per environment, or one subscription with separate resource groups. Region *Default*: `eastus2` | PR 8a |
-| Q9 | Which Postgres major version Azure Flexible Server offers as GA ⏱. Local compose and Testcontainers match it | PR 3 |
-| Q10 | Rate source (`AGENTS.md` §4.3). Strike quotes its own rate | Phase 1 checkout |
-| Q11 | Azure Key Vault holds no Ed25519 keys (*Inferred*). Keep Ed25519 receipts with the key in app memory, or switch to ECDSA P-256 signed inside Key Vault | Phase 1 receipts |
-| Q12 | Budget amounts per environment. *Default:* dev $150/month, uat $300/month | PR 8b |
-| — | *Recommendation:* the passkey RP ID is as permanent as the Lightning Login host. Add it to ADR 0011 when D18 is decided | D18 |
+| # | Issue | Question | Needed by |
+|---|---|---|---|
+| Q5 | [#10](https://github.com/DWFullen/Freeside/issues/10) | Log Analytics and App Insights keys land in state through azurerm. Is it acceptable once local auth is disabled (the default plan), or should those two use azapi instead of AVM? | PR 8b |
+| Q7 | [#11](https://github.com/DWFullen/Freeside/issues/11) | Per-developer BTCPay webhook secrets: one Key Vault secret each, or envelope encryption in Postgres with a Key Vault key (*Recommendation*: envelope encryption, recorded in an ADR) | Phase 1 onboarding |
+| Q8 | [#12](https://github.com/DWFullen/Freeside/issues/12) | One subscription per environment, or one subscription with separate resource groups. Region *Default*: `eastus2` | PR 8a |
+| Q9 | [#13](https://github.com/DWFullen/Freeside/issues/13) | Which Postgres major version Azure Flexible Server offers as GA ⏱. Local compose and Testcontainers match it | PR 3 |
+| Q10 | [#14](https://github.com/DWFullen/Freeside/issues/14) | Rate source (`AGENTS.md` §4.3). Strike quotes its own rate | Phase 1 checkout |
+| Q11 | [#15](https://github.com/DWFullen/Freeside/issues/15) | Azure Key Vault holds no Ed25519 keys (*Inferred*). Keep Ed25519 receipts with the key in app memory, or switch to ECDSA P-256 signed inside Key Vault | Phase 1 receipts |
+| Q12 | [#16](https://github.com/DWFullen/Freeside/issues/16) | Budget amounts per environment. *Default:* dev $150/month, uat $300/month | PR 8b |
+| — | [#7](https://github.com/DWFullen/Freeside/issues/7) | *Recommendation:* the passkey RP ID is as permanent as the Lightning Login host. Add it to ADR 0011 when D18 is decided | D18 |
+| Visibility | [#9](https://github.com/DWFullen/Freeside/issues/9) | **Resolved 2026-09-29:** the repository is public again, so CodeQL, dependency review, secret scanning and environment required reviewers stay free (ADR 0012 unchanged) | PR 2 |

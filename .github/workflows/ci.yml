@@ -40,3 +40,26 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build -c Release
+
+  repo-checks:
+    name: repo-checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # shellcheck is preinstalled on GitHub's Ubuntu runners.
+      - name: Shellcheck
+        run: shellcheck tools/ci/*.sh tools/ci/tests/*.sh tools/claude-cloud/*.sh
+
+      - name: Actions pinned by commit SHA
+        run: tools/ci/check-action-pins.sh
+
+      - name: Placeholders match docs/plans/placeholders.md
+        run: tools/ci/check-placeholders.sh
+
+      - name: Repo-check fixture tests
+        run: tools/ci/tests/run.sh

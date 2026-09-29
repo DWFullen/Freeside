@@ -1,0 +1,41 @@
+# Dependabot version updates (AGENTS.md §7.4).
+# - New releases wait 7 days (cooldown) before Dependabot proposes them: most
+#   compromised releases are pulled within days. Security updates skip the wait.
+# - Terraform (/infra) and docker-compose (regtest harness) are added by the PRs
+#   that create those directories (Phase 0 PR 8a and PR 3).
+# - NuGet PRs may need their lock files refreshed; see README, "Dependabot PRs".
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      nuget-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # global.json. A new SDK major (for example .NET 11) is a decision, not a bump.
+  - package-ecosystem: dotnet-sdk
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]

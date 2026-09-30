@@ -3,8 +3,8 @@
 | Field | Value |
 |---|---|
 | Scope | `project.md` §10, Phase 0: IaC (Azure + R2), CI/CD, regtest harness, auth (email + passkey), ledger schema, `IPaymentRail` |
-| Status | Approved 2026-09-27. PR 0 and PR 1 merged in #1 (2026-09-28). PR 2 in progress |
-| Related | [ADR 0012](../adr/0012-terraform-avm-state-backend.md), [`placeholders.md`](placeholders.md) |
+| Status | Approved 2026-09-27. PR 0 and PR 1 merged in #1 (2026-09-28), PR 2 in #131 (2026-09-29). PR 3 in progress |
+| Related | [ADR 0012](../adr/0012-terraform-avm-state-backend.md), [ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md), [`placeholders.md`](placeholders.md) |
 | Tracking | GitHub issues: [#22 Phase 0](https://github.com/DWFullen/Freeside/issues/22), [#2 Open decisions](https://github.com/DWFullen/Freeside/issues/2), [#23 ADRs](https://github.com/DWFullen/Freeside/issues/23), [#24 Phase 1](https://github.com/DWFullen/Freeside/issues/24). Each PR below has its own issue |
 
 Every PR builds and passes its tests on its own. PRs land in order unless the dependency column allows otherwise.
@@ -33,8 +33,9 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 | R4 | The repo is public, so logs show only `address → action` summaries. No plans run for fork PRs | ADR 0012 |
 | R5 | An ops Key Vault (CI-readable, public endpoint, RBAC per secret) plus a private app Key Vault per environment | ADR 0012 |
 | R6 | Front Door Standard in dev (custom WAF rules, public origin, `X-Azure-FDID` check). Premium with managed rules and Private Link to Container Apps in uat and prod | `infra/README.md` (PR 8c) |
-| R7 | Private BTCPay (`AGENTS.md` §6.2 option 2). The app renders checkout itself because of the unified multi-rail QR | ADR 0013 (PR 8d) |
+| R7 | The app renders checkout itself because of the unified multi-rail QR, so BTCPay's checkout page is never public (`AGENTS.md` §6.2 option 2). BTCPay is reached only through a Tor onion service, via a Tor client sidecar ([#132](https://github.com/DWFullen/Freeside/issues/132)) | ADR 0013 |
 | R8 | PR 8 is split into 8a–8d, and PR 10 is added for container images and deployment | This file |
+| R9 | BTCPay runs on the operator's Start9 node, not in Azure. No BTCPay VM, Bastion, subnet or resource group. Signet for dev and UAT runs on a separate machine the operator controls. Every node detail is a placeholder until the node is set up | [ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md) |
 
 ## PR sequence
 
@@ -42,8 +43,8 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 |---|---|---|---|---|---|
 | 0 | [#28](https://github.com/DWFullen/Freeside/issues/28) | Docs: ADR 0012, `project.md` §8, README, plans | no | — | Done ([#1](https://github.com/DWFullen/Freeside/pull/1)) |
 | 1 | [#29](https://github.com/DWFullen/Freeside/issues/29) | Solution skeleton + CI | no | 0 | Done ([#1](https://github.com/DWFullen/Freeside/pull/1)) |
-| 2 | [#27](https://github.com/DWFullen/Freeside/issues/27) | Supply chain | no | 1 | In progress |
-| 3 | [#30](https://github.com/DWFullen/Freeside/issues/30) | Regtest harness + dockerd session hook | yes | 1 | Planned |
+| 2 | [#27](https://github.com/DWFullen/Freeside/issues/27) | Supply chain | no | 1 | Done ([#131](https://github.com/DWFullen/Freeside/pull/131)) |
+| 3 | [#30](https://github.com/DWFullen/Freeside/issues/30) | Regtest harness + dockerd session hook | yes | 1 | In progress |
 | 4 | [#31](https://github.com/DWFullen/Freeside/issues/31) | Data layer, money types, append-only ledger | yes (Testcontainers) | 1 | Planned |
 | 5 | [#32](https://github.com/DWFullen/Freeside/issues/32) | Inbox/outbox + Postgres job queue | yes | 4 | Planned |
 | 6 | [#33](https://github.com/DWFullen/Freeside/issues/33) | `IPaymentRail`, `RailSelector`, BTCPay adapter, fakes | yes | 3, 5 | Planned |
@@ -51,7 +52,7 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 | 8a | [#35](https://github.com/DWFullen/Freeside/issues/35) | Terraform bootstrap + Terraform CI + `setup.sh` | no | 2 | Planned |
 | 8b | [#36](https://github.com/DWFullen/Freeside/issues/36) | Azure: network, observability, Key Vault, ACR, Postgres | no | 8a | Planned |
 | 8c | [#37](https://github.com/DWFullen/Freeside/issues/37) | Azure: Container Apps, Front Door + WAF, quarantine storage + Defender | no | 8b | Planned |
-| 8d | [#38](https://github.com/DWFullen/Freeside/issues/38) | Azure: BTCPay VM + Bastion, ADR 0013 | no | 8b | Planned |
+| 8d | [#38](https://github.com/DWFullen/Freeside/issues/38) | BTCPay on the Start9 node: connection placeholders, connection check, runbook | no | 6, [#132](https://github.com/DWFullen/Freeside/issues/132) | Planned |
 | 9 | [#39](https://github.com/DWFullen/Freeside/issues/39) | Cloudflare R2 | no | 8a | Planned |
 | 10 | [#40](https://github.com/DWFullen/Freeside/issues/40) | Container images, provenance, deploy + migration job | no | 1, 4, 8c | Planned |
 
@@ -114,15 +115,22 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
   - Re-paste `setup.sh`.
 
 ### PR 3: Regtest harness
-- **Compose file:** `tools/regtest/compose.yml` with every image pinned by digest: bitcoind (`btcpayserver/bitcoin`), NBXplorer, BTCPay Server, Postgres for BTCPay, Postgres for the app, Mailpit. Ports bind to 127.0.0.1 only.
-- **Commands:** `make regtest-up`, `make regtest-down` and `make regtest-test`.
+- **Compose file:** `tools/regtest/compose.yml` with every image pinned by tag and digest: bitcoind (`btcpayserver/bitcoin`), NBXplorer, BTCPay Server, Postgres for BTCPay, Postgres for the app, Mailpit. Ports bind to 127.0.0.1 only.
+  - **Versions:** the BTCPay stack matches the operator's Start9 node (ADR 0013): the StartOS BTCPay package at `21ce7266` (BTCPay 2.4.4, NBXplorer 2.6.13, `btcpayserver/postgres` 18.6) and Bitcoin Core 31.1. It is re-pinned by hand when the node's package is updated; Dependabot ignores those images. The app's Postgres is 18 ([#13](https://github.com/DWFullen/Freeside/issues/13)).
+  - NBXplorer's own regtest warm-up mining is off; `up.sh` mines the first 101 blocks, so the chain doesn't depend on which of the two runs first.
+- **Commands:** `make regtest-up`, `make regtest-down` and `make regtest-test`. `tools/regtest/wait.sh` waits for BTCPay's `/api/v1/health` to report `synchronized`.
 - **Smoke test** (`Category=Regtest`):
   1. Create the first user, an API key and a store with a throwaway watch-only BIP84 xpub.
   2. Create a BTC-denominated invoice (no rate source involved).
   3. Assert the address starts with `bcrt1`.
   4. Pay, mine one block, and wait for `Settled`.
   5. A second invoice gets a fresh address.
-- **CI:** a `regtest` job.
+  - Also checked:
+    - BTCPay's address preview matches the addresses derived locally from the xpub (`project.md` §4.2).
+    - Before the block is mined, the payment is still `Processing`. The payment doesn't signal RBF, because BTCPay never settles a replaceable payment at 0-conf anyway.
+  - The throwaway admin is opted in to Greenfield basic auth. Otherwise BTCPay allows basic auth only in an account's first five minutes, and a reused stack couldn't create an API key.
+- **CI:** a `regtest` job. The unit job filters `Category!=Regtest`; the regtest project ignores exit code 8 (zero tests ran) for that filter, and `make regtest-test` requires at least one test to run.
+- **Repo checks:** `tools/ci/check-image-pins.sh` fails on any compose image not pinned as `name:tag@sha256:<digest>`.
 - **Session:**
   - `.claude/settings.json` gets a SessionStart hook (`tools/claude-cloud/session-start.sh`) that starts dockerd when `CLAUDE_CODE_REMOTE=true`.
   - `setup.sh` pre-pulls the pinned images.
@@ -152,10 +160,12 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 - **BTCPay adapter:**
   - Checks the HMAC over the raw body with a constant-time compare, and fails closed when no secret is configured.
   - Persists to the inbox and acknowledges. The worker re-fetches the invoice before every transition; transitions are idempotent on `(invoiceId, targetState)`.
-- **Startup network check:** preview address prefixes are compared with `Bitcoin:Network`. A mismatch refuses to start. An unreachable BTCPay only opens the rail's breaker.
+  - Optional SOCKS5 proxy (`Btcpay:SocksProxy`) for the Tor sidecar (ADR 0013). Outside regtest, `http://` is accepted only for a `.onion` host. The base URL is never logged.
+- **Startup network check:** preview address prefixes are compared with `Bitcoin:Network`. A mismatch refuses to start. An unreachable or unconfigured BTCPay (its placeholders not yet set, ADR 0013) only opens the rail's breaker.
 - **Tests:**
   - Contract tests per `AGENTS.md` §7.2: valid, bad signature, missing secret, replay, out of order, backward transition, tampered body.
   - A regtest end-to-end test with a real webhook.
+  - The proxy path, through a local SOCKS5 proxy added to the regtest stack. The real onion hop needs the Tor network, which CI and the session can't reach; the PR 8d connection check covers it.
 - **Invariants:** 2, 3, 4, 6, 9, 15; P8.
 
 ### PR 7: Auth
@@ -174,7 +184,7 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 ### PR 8a: Terraform bootstrap + CI
 - **`infra/bootstrap`:**
   - State storage account and ops Key Vault (AVM).
-  - Per environment: `plan` and `apply` identities (AVM UAMI with federated credentials), and resource groups `rg-freeside-<env>` and `rg-freeside-<env>-btcpay`.
+  - Per environment: `plan` and `apply` identities (AVM UAMI with federated credentials), and resource group `rg-freeside-<env>`. No BTCPay resource group: BTCPay runs on the operator's node (ADR 0013).
   - Role assignments.
 - **Shared config:** `infra/.tflint.hcl` and three-platform lock files.
 - **CI:** `.github/workflows/terraform.yml` per ADR 0012.
@@ -197,16 +207,33 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 
 ### PR 8c: Azure edge and app
 - **Container Apps:** workload-profile environment, `web` and `worker` with user-assigned identities, and Key Vault secret references by name.
+- **Tor client sidecar** in `web` and `worker` (ADR 0013): SOCKS5 on `127.0.0.1:9050`, image digest as a variable (image from PR 10).
 - **Front Door + WAF:** per R6.
 - **Quarantine storage:** shared keys off, user-delegation SAS only, a public endpoint (developers upload directly), and Defender for Storage malware scanning on upload.
 - **App code:** the `X-Azure-FDID` check.
 
-### PR 8d: BTCPay VM + ADR 0013
-- **VM:** AVM VM with no public IP, SSH public key only, Entra SSH login, encryption at host.
-- **Bastion:** Developer SKU in dev, Basic in uat, Standard in prod.
-- **cloud-init:** `btcpayserver-docker` at a pinned commit, no Lightning, pruned node.
-- **NSG:** inbound only from the app subnet and Bastion; outbound P2P for the environment's network, plus 443.
-- **Runbook:** `docs/runbooks/btcpay-post-install.md`.
+### PR 8d: BTCPay on the Start9 node
+No Azure resources for BTCPay ([ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md)). The app reaches it over a Tor onion service ([#132](https://github.com/DWFullen/Freeside/issues/132)). Needs PR 6, and the Tor sidecar from PR 8c and PR 10.
+- **Configuration per environment:**
+  - `Btcpay:BaseUrl`: the BTCPay onion URL (`btcpay-base-url`, a Key Vault secret, because StartOS onion services have no client authorization).
+  - `Btcpay:SocksProxy`: `socks5://127.0.0.1:9050`, the sidecar.
+  - Key Vault secret names for the API key and webhook secret.
+  - The URL, key and secret are placeholders until the node exists.
+- **Connection check:** a read-only command, run against a configured environment, that checks:
+  - `/api/v1/health` reports synchronized;
+  - the server version matches the regtest pin;
+  - the platform store's preview addresses carry the environment's prefix;
+  - a test webhook arrives;
+  - round-trip times are reported.
+- **Runbook** `docs/runbooks/btcpay-start9-setup.md`:
+  - installing the StartOS BTCPay and Bitcoin Core packages;
+  - registrations off, 2FA or passkeys on;
+  - the API key with minimal permissions;
+  - the platform store with the watch-only xpub;
+  - the webhook;
+  - backups, and a restore drill with the NBXplorer rescan;
+  - a UPS and outage alerts;
+  - re-pinning `tools/regtest/compose.yml` after a Start9 package update.
 
 ### PR 9: Cloudflare R2
 - **Bucket:** one R2 bucket per environment in the same Terraform roots.
@@ -220,6 +247,7 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 - **Build pipeline:** CycloneDX SBOM, `actions/attest-build-provenance`, push to ACR over OIDC.
 - **Deploy:** `terraform apply` with image digests.
 - **Migrations:** an EF migration bundle as a Container Apps Job under a migrator identity.
+- **Tor client sidecar image** (ADR 0013): built from the Tor Project's Debian package on a base image pinned by digest, with the same SBOM, provenance and scanning as the app images.
 
 ## Phase 1: what can be built now, and what is blocked
 
@@ -256,9 +284,10 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 | Q5 | [#10](https://github.com/DWFullen/Freeside/issues/10) | Log Analytics and App Insights keys land in state through azurerm. Is it acceptable once local auth is disabled (the default plan), or should those two use azapi instead of AVM? | PR 8b |
 | Q7 | [#11](https://github.com/DWFullen/Freeside/issues/11) | Per-developer BTCPay webhook secrets: one Key Vault secret each, or envelope encryption in Postgres with a Key Vault key (*Recommendation*: envelope encryption, recorded in an ADR) | Phase 1 onboarding |
 | Q8 | [#12](https://github.com/DWFullen/Freeside/issues/12) | One subscription per environment, or one subscription with separate resource groups. Region *Default*: `eastus2` | PR 8a |
-| Q9 | [#13](https://github.com/DWFullen/Freeside/issues/13) | Which Postgres major version Azure Flexible Server offers as GA ⏱. Local compose and Testcontainers match it | PR 3 |
+| Q9 | [#13](https://github.com/DWFullen/Freeside/issues/13) | **Resolved 2026-09-29: PostgreSQL 18.** It is GA on Azure Flexible Server (*Documented*, Microsoft Tech Community, "PostgreSQL 18 now GA on Azure Postgres Flexible Server", late 2025); 19 is still in beta upstream. The app database uses 18 in compose, Testcontainers and Azure. BTCPay's own database is `btcpayserver/postgres` 18.6, the image the Start9 BTCPay package ships (ADR 0013) ⏱ | PR 3 |
 | Q10 | [#14](https://github.com/DWFullen/Freeside/issues/14) | Rate source (`AGENTS.md` §4.3). Strike quotes its own rate | Phase 1 checkout |
 | Q11 | [#15](https://github.com/DWFullen/Freeside/issues/15) | Azure Key Vault holds no Ed25519 keys (*Inferred*). Keep Ed25519 receipts with the key in app memory, or switch to ECDSA P-256 signed inside Key Vault | Phase 1 receipts |
 | Q12 | [#16](https://github.com/DWFullen/Freeside/issues/16) | Budget amounts per environment. *Default:* dev $150/month, uat $300/month | PR 8b |
+| Q13 | [#132](https://github.com/DWFullen/Freeside/issues/132) | **Resolved 2026-09-30: Tor onion service** through a Tor client sidecar; StartTunnel is the fallback if Tor latency hurts checkout; Cloudflare Tunnel rejected. Signet for dev and UAT runs on a machine the operator controls (ADR 0013) | PR 8c |
 | — | [#7](https://github.com/DWFullen/Freeside/issues/7) | *Recommendation:* the passkey RP ID is as permanent as the Lightning Login host. Add it to ADR 0011 when D18 is decided | D18 |
 | Visibility | [#9](https://github.com/DWFullen/Freeside/issues/9) | **Resolved 2026-09-29:** the repository is public again, so CodeQL, dependency review, secret scanning and environment required reviewers stay free (ADR 0012 unchanged) | PR 2 |

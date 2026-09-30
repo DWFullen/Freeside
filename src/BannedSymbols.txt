@@ -1,0 +1,75 @@
+T:System.Double;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Sats, MilliSats or Money.
+T:System.Single;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Sats, MilliSats or Money.
+T:System.Half;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Sats, MilliSats or Money.
+M:System.Convert.ToDouble(System.Boolean);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Byte);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Char);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.DateTime);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Decimal);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Int16);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Int32);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Int64);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Object);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Object,System.IFormatProvider);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.SByte);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.Single);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.String);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.String,System.IFormatProvider);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.UInt16);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.UInt32);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToDouble(System.UInt64);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Boolean);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Byte);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Char);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.DateTime);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Decimal);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Int16);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Int32);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Int64);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Object);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Object,System.IFormatProvider);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.SByte);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.Single);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.String);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.String,System.IFormatProvider);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.UInt16);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.UInt32);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Convert.ToSingle(System.UInt64);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+T:System.MathF;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Pow(System.Double,System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Sqrt(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Cbrt(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Exp(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Log(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Log(System.Double,System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Log10(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Log2(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Floor(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Ceiling(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Truncate(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Round(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Round(System.Double,System.Int32);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Round(System.Double,System.MidpointRounding);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Round(System.Double,System.Int32,System.MidpointRounding);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Abs(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Abs(System.Single);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Max(System.Double,System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Min(System.Double,System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Max(System.Single,System.Single);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Math.Min(System.Single,System.Single);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+P:System.TimeSpan.TotalDays;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+P:System.TimeSpan.TotalHours;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+P:System.TimeSpan.TotalMinutes;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+P:System.TimeSpan.TotalSeconds;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+P:System.TimeSpan.TotalMilliseconds;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+P:System.TimeSpan.TotalMicroseconds;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+P:System.TimeSpan.TotalNanoseconds;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+M:System.TimeSpan.op_Division(System.TimeSpan,System.TimeSpan);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.TimeSpan.Divide(System.TimeSpan);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Random.NextDouble;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Random.NextSingle;Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Numerics.BigInteger.Log(System.Numerics.BigInteger);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Numerics.BigInteger.Log(System.Numerics.BigInteger,System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.Numerics.BigInteger.Log10(System.Numerics.BigInteger);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).

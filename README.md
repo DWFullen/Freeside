@@ -15,8 +15,8 @@ A DRM-free marketplace for games and other digital goods, paid in bitcoin. Buyer
 | [`CLAUDE.md`](CLAUDE.md) | Loads `AGENTS.md` and `project.md` into every Claude Code session | — |
 | [`tools/claude-cloud/setup.sh`](tools/claude-cloud/setup.sh) | Reviewed copy of the claude.ai/code cloud environment setup script | — |
 | [`docs/plans/`](docs/plans/) | Phase plans and the list of placeholders still to be supplied | — |
-| `src/` | `Freeside.Core` (domain, no infrastructure dependencies), `Freeside.Web` (ASP.NET Core, Razor Pages), `Freeside.Worker` (background jobs) | — |
-| `tests/` | xUnit v3 test projects, one per `src/` project, plus `Freeside.Regtest.Tests` (needs the regtest stack) | — |
+| `src/` | `Freeside.Core` (domain: money types, ledger entries; no infrastructure dependencies), `Freeside.Infrastructure` (EF Core on PostgreSQL, migrations), `Freeside.Web` (ASP.NET Core, Razor Pages), `Freeside.Worker` (background jobs) | — |
+| `tests/` | xUnit v3 test projects, one per `src/` project (`Freeside.Infrastructure.Tests` needs Docker), plus `Freeside.Regtest.Tests` (needs the regtest stack) | — |
 | [`tools/regtest/`](tools/regtest/) | Docker compose regtest stack: BTCPay Server, bitcoind, NBXplorer, Postgres, Mailpit | — |
 
 More specific layers override less specific ones. **Nothing overrides an `AGENTS.md` §2 or `project.md` §2 invariant except an accepted ADR that states the risk accepted.**
@@ -39,10 +39,14 @@ Needs the .NET SDK pinned in [`global.json`](global.json) (10.0.401, any later 1
 ```sh
 dotnet restore --locked-mode
 dotnet build --no-restore -c Release
+dotnet tool restore
+dotnet ef migrations has-pending-model-changes --project src/Freeside.Infrastructure --configuration Release --no-build
 dotnet test --no-build -c Release --filter-not-trait "Category=Regtest"
 ```
 
-The filter leaves out the tests that need the regtest stack (below).
+- **The filter** leaves out the tests that need the regtest stack (below).
+- **`Freeside.Infrastructure.Tests` needs Docker.** Testcontainers starts the same Postgres image as the regtest stack. Without Docker those tests fail rather than skip.
+- **`dotnet tool restore`** installs the pinned `dotnet-ef` from [`.config/dotnet-tools.json`](.config/dotnet-tools.json).
 
 - **Warnings are errors.** That includes the analyzers and the `.editorconfig` code-style and naming rules ([`Directory.Build.props`](Directory.Build.props)).
 - **Tests run on Microsoft.Testing.Platform** (xUnit v3), selected in `global.json`.
@@ -58,6 +62,27 @@ dotnet run --project src/Freeside.Worker
 The launch profiles set `Bitcoin__Network=regtest`.
 
 **`Bitcoin:Network` has no default** (`AGENTS.md` §2, invariant 4). Both hosts refuse to start if it is missing, or if it isn't exactly one of `regtest`, `signet`, `testnet4`, `mainnet`. They also refuse to start if a fake service (a stand-in listed in [`docs/plans/placeholders.md`](docs/plans/placeholders.md)) is registered on any network other than `regtest`.
+
+### Money and the ledger
+
+- **No binary floating point in `Freeside.Core` or `Freeside.Infrastructure`** (`AGENTS.md` §2, invariant 5). Amounts use `Sats`, `MilliSats` and `Money` (fiat minor units), all `long`. Exchange rates are decimal strings. Conversions use exact integer arithmetic and a named `RoundingRule`.
+- **Two checks enforce it:**
+  - the banned-API analyzer ([`src/BannedSymbols.txt`](src/BannedSymbols.txt)) rejects floating-point members and APIs that return doubles, at build time;
+  - [`FloatingPointBanTests`](tests/Freeside.Core.Tests/FloatingPointBanTests.cs) catches `double`/`float` declarations, casts and literals like `19.99`, which the analyzer can't see.
+- **The ledger (`ledger_entries`) is append-only in the database** (invariant 7):
+  - the app role holds only `SELECT` and `INSERT`;
+  - triggers reject `UPDATE`, `DELETE` and `TRUNCATE`, even for the table owner.
+- **Amounts are never negative.** The entry type says whether an entry is a credit or a debit, and balances are always derived from the entries.
+
+### Database and migrations
+
+- **Roles:** before the first migration, a database admin runs [`bootstrap-roles.sql`](src/Freeside.Infrastructure/Database/bootstrap-roles.sql) once. It creates the group roles `freeside_migrator` (applies migrations, owns the tables) and `freeside_app` (what the hosts run as). Login roles are made members of these groups.
+- **Adding a migration:** `dotnet ef migrations add <Name> --project src/Freeside.Infrastructure --output-dir Migrations`. The hosts never apply migrations at startup. Apply them with `dotnet ef database update --project src/Freeside.Infrastructure --connection "<migrator connection string>"`, or with the migration bundle job (PR 10).
+- **Authentication** (`Database:Authentication`, no default):
+  - `Password` is allowed only when `Bitcoin:Network` is `regtest`.
+  - Everywhere else it's `EntraManagedIdentity`: a managed identity's token instead of a password, over TLS.
+  - Startup refuses anything else.
+- **Not wired into Web or Worker yet.** PR 5 is the first code that uses the database, and connects it there.
 
 ### Regtest stack
 

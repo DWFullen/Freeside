@@ -105,6 +105,15 @@ Three Postgres tables hold the work the Worker does in the background. No messag
 - **Settings** (`WorkQueues`, validated at startup): `PollInterval`, `BatchSize`, `Lease`, `MaxAttempts`, `BackoffBase`, `BackoffCap`, `Concurrency`.
 - **Finished rows are kept.** The app role can't delete them; a retention job comes later ([#135](https://github.com/DWFullen/Freeside/issues/135)).
 
+### Payments
+
+Buyers pay developers directly (`project.md` §4.2, P1). The code in [`src/Freeside.Core/Payments`](src/Freeside.Core/Payments) decides how:
+
+- **Rails** (`IPaymentRail`) create invoices and report their state. The rail is the only source of payment state: webhooks only trigger a re-fetch (`AGENTS.md` §2, invariant 2).
+- **`PaymentStateMachine`** maps a re-fetched invoice to the order's payment state (`AGENTS.md` §4.4). It never throws. A move it doesn't expect, such as `Paid` → `Invalid` after a reorg, is applied and sent to manual review (invariant 15).
+- **`RailSelector`** picks the developer's first healthy rail per layer (on-chain, Lightning), and offers on-chain only from $10. `RailHealth` keeps a circuit breaker per rail; `Payments:Rails:<id>:Disabled` is the kill switch.
+- **Placeholders:** until there are Strike and ACH accounts, `Payments:Strike:Adapter=Fake` and `Fees:Collector:Adapter=Fake` select in-memory fakes. The launch profiles set both. Fakes are refused on any network but regtest; leave the settings unset to turn the rail or fee collection off.
+
 ### Regtest stack
 
 Needs Docker with Compose v2. [`tools/regtest/compose.yml`](tools/regtest/compose.yml) runs BTCPay Server on **regtest** with bitcoind, NBXplorer and BTCPay's Postgres, plus the app's own Postgres and Mailpit. Every credential in it is a throwaway that works only on this local stack.

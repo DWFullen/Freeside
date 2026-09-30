@@ -18,6 +18,14 @@ if ! command -v dockerd >/dev/null 2>&1 || [ "$(id -u)" -ne 0 ]; then
   exit 0
 fi
 
+# The disk outlives the container, so a session killed mid-run leaves dockerd's
+# and containerd's PID files behind. If a stale file now names an unrelated
+# process, dockerd waits for a containerd that isn't there and gives up. Neither
+# daemon is running here, so any such file is stale.
+if ! pgrep -x dockerd >/dev/null 2>&1 && ! pgrep -x containerd >/dev/null 2>&1; then
+  rm -f /var/run/docker.pid /var/run/docker/containerd/containerd.pid
+fi
+
 # Detached, and with no handle on the hook's stdout, so the hook can return
 # while dockerd keeps running.
 log="${TMPDIR:-/tmp}/dockerd.log"

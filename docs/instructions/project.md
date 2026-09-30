@@ -342,7 +342,7 @@ The user's direction: self-serve, judged automatically against platform standard
 | Data | PostgreSQL Flexible Server, EF Core, `bigint` money columns | Append-only ledger. Balances derived from the ledger |
 | Background work | *Default:* `BackgroundService` workers plus a Postgres-backed queue (`FOR UPDATE SKIP LOCKED`) | No message broker (`AGENTS.md` §1) |
 | Compute | *Default:* **Container Apps**: `web` and `worker` | Two services, per `AGENTS.md` §6.1 |
-| Payments | BTCPay Server on the **operator's own Start9 node**, not in Azure (ADR 0013, D20). **Multi-tenant with one store per developer**, plus the platform's fallback revenue store. Platform treasury and Lightning receiving on Strike Business (§4.6) | Hot wallets and internal Lightning disabled for non-admins. How the app reaches the node is open (D21) |
+| Payments | BTCPay Server on the **operator's own Start9 node**, not in Azure (ADR 0013, D20). **Multi-tenant with one store per developer**, plus the platform's fallback revenue store. Platform treasury and Lightning receiving on Strike Business (§4.6) | Hot wallets and internal Lightning disabled for non-admins. The app reaches the node over a Tor onion service through a Tor client sidecar (D21) |
 | Fee collection (fiat) | An ACH origination provider with tokenized bank linking (D12), settling into the platform's Strike Business account (§4.6) | `IFeeCollector` interface. Debit scheduler is a `BackgroundService`. Provider webhooks go into the inbox (`AGENTS.md` §4.6) |
 | Rail adapters | A `IPaymentRail` interface with implementations `StrikeDirected` (primary), `BtcpayOnchain` and `LnurlVerify` (backups), later `Nwc`. A `RailSelector` applies priority and circuit-breaker state per developer | Each emits normalized invoice events into the inbox. Failover switches are ledger rows |
 | Artifact storage and delivery | **Cloudflare R2** (zero egress, `AGENTS.md` §5.3) with presigned GET URLs minted after the entitlement check | The platform pays for downloads out of its fee share. With zero egress that stays viable |
@@ -382,6 +382,7 @@ The user's direction: self-serve, judged automatically against platform standard
 | D15 | Age checks: **self-attestation plus adult-share monitoring**; verified checks before nearing any state threshold |
 | D9 | Store name **Freeside**, parent company **Sprawl** (§1) |
 | D20 | BTCPay Server runs on the **operator's Start9 node**, not in Azure; no BTCPay VM (ADR 0013, 2026-09-30) |
+| D21 | The app reaches BTCPay over a **Tor onion service**, through a Tor client sidecar; StartTunnel is the fallback if Tor is too slow, Cloudflare Tunnel is rejected. Signet BTCPay for dev and UAT runs on a machine the operator controls ([#132](https://github.com/DWFullen/Freeside/issues/132), ADR 0013, 2026-09-30) |
 
 ### 9.2 Open
 
@@ -393,7 +394,6 @@ The user's direction: self-serve, judged automatically against platform standard
 | D19 | Trademark clearance for FREESIDE and the parent name (classes 9, 35, 41, 42), with Fallout and SPRAWL as known associations; check social handles | Counsel + user | Before public use of the name |
 | D17 | Draft the published content standards: quality bar, excluded categories if any, mature and adult tagging, how the standards can change (public notice + ADR, P10) | User + Claude | Before onboarding opens |
 | D16 | Write `docs/instructions/payments.md`: signed payout config format, NIP-05 pinning (and what happens for developers without a domain), relay-published commitments, a developer-side monitoring tool, rail priority and circuit breaker | Claude | Phase 1 |
-| D21 | How the app in Azure reaches BTCPay on the Start9 node (Tor, Cloudflare Tunnel or StartTunnel), and where the signet BTCPay for dev and UAT runs ([#132](https://github.com/DWFullen/Freeside/issues/132)) | User; Claude researched | PR 8c |
 
 ---
 

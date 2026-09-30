@@ -33,7 +33,7 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 | R4 | The repo is public, so logs show only `address → action` summaries. No plans run for fork PRs | ADR 0012 |
 | R5 | An ops Key Vault (CI-readable, public endpoint, RBAC per secret) plus a private app Key Vault per environment | ADR 0012 |
 | R6 | Front Door Standard in dev (custom WAF rules, public origin, `X-Azure-FDID` check). Premium with managed rules and Private Link to Container Apps in uat and prod | `infra/README.md` (PR 8c) |
-| R7 | The app renders checkout itself because of the unified multi-rail QR, so BTCPay's checkout page is never public (`AGENTS.md` §6.2 option 2). BTCPay is reached only through the channel chosen in [#132](https://github.com/DWFullen/Freeside/issues/132) | ADR 0013 |
+| R7 | The app renders checkout itself because of the unified multi-rail QR, so BTCPay's checkout page is never public (`AGENTS.md` §6.2 option 2). BTCPay is reached only through a Tor onion service, via a Tor client sidecar ([#132](https://github.com/DWFullen/Freeside/issues/132)) | ADR 0013 |
 | R8 | PR 8 is split into 8a–8d, and PR 10 is added for container images and deployment | This file |
 | R9 | BTCPay runs on the operator's Start9 node, not in Azure. No BTCPay VM, Bastion, subnet or resource group. Signet for dev and UAT runs on a separate machine the operator controls. Every node detail is a placeholder until the node is set up | [ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md) |
 
@@ -160,10 +160,12 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 - **BTCPay adapter:**
   - Checks the HMAC over the raw body with a constant-time compare, and fails closed when no secret is configured.
   - Persists to the inbox and acknowledges. The worker re-fetches the invoice before every transition; transitions are idempotent on `(invoiceId, targetState)`.
+  - Optional SOCKS5 proxy (`Btcpay:SocksProxy`) for the Tor sidecar (ADR 0013). Outside regtest, `http://` is accepted only for a `.onion` host. The base URL is never logged.
 - **Startup network check:** preview address prefixes are compared with `Bitcoin:Network`. A mismatch refuses to start. An unreachable or unconfigured BTCPay (its placeholders not yet set, ADR 0013) only opens the rail's breaker.
 - **Tests:**
   - Contract tests per `AGENTS.md` §7.2: valid, bad signature, missing secret, replay, out of order, backward transition, tampered body.
   - A regtest end-to-end test with a real webhook.
+  - The proxy path, through a local SOCKS5 proxy added to the regtest stack. The real onion hop needs the Tor network, which CI and the session can't reach; the PR 8d connection check covers it.
 - **Invariants:** 2, 3, 4, 6, 9, 15; P8.
 
 ### PR 7: Auth
@@ -205,17 +207,18 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 
 ### PR 8c: Azure edge and app
 - **Container Apps:** workload-profile environment, `web` and `worker` with user-assigned identities, and Key Vault secret references by name.
+- **Tor client sidecar** in `web` and `worker` (ADR 0013): SOCKS5 on `127.0.0.1:9050`, image digest as a variable (image from PR 10).
 - **Front Door + WAF:** per R6.
 - **Quarantine storage:** shared keys off, user-delegation SAS only, a public endpoint (developers upload directly), and Defender for Storage malware scanning on upload.
 - **App code:** the `X-Azure-FDID` check.
 
 ### PR 8d: BTCPay on the Start9 node
-No Azure resources for BTCPay ([ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md)). Needs PR 6 and the connection decision in [#132](https://github.com/DWFullen/Freeside/issues/132).
+No Azure resources for BTCPay ([ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md)). The app reaches it over a Tor onion service ([#132](https://github.com/DWFullen/Freeside/issues/132)). Needs PR 6, and the Tor sidecar from PR 8c and PR 10.
 - **Configuration per environment:**
-  - `Btcpay:BaseUrl` and the connection settings #132 calls for, such as a SOCKS proxy for Tor.
+  - `Btcpay:BaseUrl`: the BTCPay onion URL (`btcpay-base-url`, a Key Vault secret, because StartOS onion services have no client authorization).
+  - `Btcpay:SocksProxy`: `socks5://127.0.0.1:9050`, the sidecar.
   - Key Vault secret names for the API key and webhook secret.
-  - All of them are placeholders until the node exists.
-- **Azure side of the connection,** per #132. For example, a Tor client sidecar in `web` and `worker`, or a static egress IP for an allowlist. Its Terraform lands in PR 8c.
+  - The URL, key and secret are placeholders until the node exists.
 - **Connection check:** a read-only command, run against a configured environment, that checks:
   - `/api/v1/health` reports synchronized;
   - the server version matches the regtest pin;
@@ -244,6 +247,7 @@ No Azure resources for BTCPay ([ADR 0013](../adr/0013-btcpay-on-operator-start9-
 - **Build pipeline:** CycloneDX SBOM, `actions/attest-build-provenance`, push to ACR over OIDC.
 - **Deploy:** `terraform apply` with image digests.
 - **Migrations:** an EF migration bundle as a Container Apps Job under a migrator identity.
+- **Tor client sidecar image** (ADR 0013): built from the Tor Project's Debian package on a base image pinned by digest, with the same SBOM, provenance and scanning as the app images.
 
 ## Phase 1: what can be built now, and what is blocked
 
@@ -284,6 +288,6 @@ No Azure resources for BTCPay ([ADR 0013](../adr/0013-btcpay-on-operator-start9-
 | Q10 | [#14](https://github.com/DWFullen/Freeside/issues/14) | Rate source (`AGENTS.md` §4.3). Strike quotes its own rate | Phase 1 checkout |
 | Q11 | [#15](https://github.com/DWFullen/Freeside/issues/15) | Azure Key Vault holds no Ed25519 keys (*Inferred*). Keep Ed25519 receipts with the key in app memory, or switch to ECDSA P-256 signed inside Key Vault | Phase 1 receipts |
 | Q12 | [#16](https://github.com/DWFullen/Freeside/issues/16) | Budget amounts per environment. *Default:* dev $150/month, uat $300/month | PR 8b |
-| Q13 | [#132](https://github.com/DWFullen/Freeside/issues/132) | How the app in Azure reaches BTCPay on the Start9 node (Tor, Cloudflare Tunnel or StartTunnel; *Recommendation*: Tor, confirmed by a latency measurement), and where the signet BTCPay for dev and UAT runs | PR 8c |
+| Q13 | [#132](https://github.com/DWFullen/Freeside/issues/132) | **Resolved 2026-09-30: Tor onion service** through a Tor client sidecar; StartTunnel is the fallback if Tor latency hurts checkout; Cloudflare Tunnel rejected. Signet for dev and UAT runs on a machine the operator controls (ADR 0013) | PR 8c |
 | — | [#7](https://github.com/DWFullen/Freeside/issues/7) | *Recommendation:* the passkey RP ID is as permanent as the Lightning Login host. Add it to ADR 0011 when D18 is decided | D18 |
 | Visibility | [#9](https://github.com/DWFullen/Freeside/issues/9) | **Resolved 2026-09-29:** the repository is public again, so CodeQL, dependency review, secret scanning and environment required reviewers stay free (ADR 0012 unchanged) | PR 2 |

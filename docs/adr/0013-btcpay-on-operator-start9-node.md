@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Accepted (hosting). How Azure reaches the node is open: [#132](https://github.com/DWFullen/Freeside/issues/132) |
+| Status | Accepted. Connection decided 2026-09-30: a Tor onion service ([#132](https://github.com/DWFullen/Freeside/issues/132)) |
 | Date | 2026-09-30 |
 | Overrides | `project.md` §8 "BTCPay Server VM"; the Phase 0 plan's PR 8d (BTCPay VM + Bastion); the `AGENTS.md` §3 and §6.1 defaults for the processor host. Accepts a deviation from `AGENTS.md` invariant 14 (see Consequences) |
 | Sources | `project.md` §0.3, §4.2, §8; `AGENTS.md` §2 (invariants 1, 4, 8, 14), §4.2, §6.3, §7.2, §7.5; [`docs/plans/phase-0.md`](../plans/phase-0.md) |
@@ -16,22 +16,34 @@
   - StartOS updates BTCPay itself (BTCPay's own update check is off), so the node's versions change only when Start9 ships a new package.
   - Backups leave out NBXplorer's state. A restore is followed by a chain rescan.
   - It exposes one interface: the web UI and Greenfield API on port 23000. NBXplorer and Postgres stay private to the service.
-- StartOS reaches the outside through Tor (a separate service), clearnet via the home router, or a StartTunnel WireGuard gateway on a VPS (*Documented*, StartOS docs). Which one the app uses is decided in #132.
+- StartOS reaches the outside through Tor (a separate service), clearnet via the home router, or a StartTunnel WireGuard gateway on a VPS (*Documented*, StartOS docs). #132 compared Tor, Cloudflare Tunnel and StartTunnel; the operator chose Tor (see Connection).
 - `AGENTS.md` §6.3 already names owned hardware as the alternative when physical custody matters, and a processor that can move within hours as the answer to single-provider risk.
 
 ## Decision
 
 1. **No BTCPay in Azure.** No VM, Bastion, subnet, NSG or resource group for BTCPay in any environment.
 2. **Production (mainnet)** BTCPay is the operator's Start9 node. It is multi-tenant as before (`project.md` §8): one store per developer, plus the platform's fallback store. Hot wallets and built-in Lightning stay disabled for developer stores.
-3. **Dev and UAT (signet)** use a separate signet BTCPay on a machine the operator controls (placeholder `btcpay-signet-host`, #132). Until it exists, dev and UAT run with the BTCPay rail off.
+3. **Dev and UAT (signet)** use a separate signet BTCPay (`btcpayserver-docker`) on a machine the operator controls (placeholder `btcpay-signet-host`; option A in #132). Until it exists, dev and UAT run with the BTCPay rail off.
 4. **Local and CI** use the regtest stack in `tools/regtest/compose.yml`. Its BTCPay, NBXplorer, BTCPay Postgres and Bitcoin Core versions **match the Start9 packages**, and are re-pinned by hand when the node's package is updated. Dependabot doesn't bump them.
-5. **Placeholders** until the node is set up: `btcpay-base-url`, `btcpay-connectivity`, `btcpay-api-key`, `btcpay-webhook-secret`, `btcpay-mainnet-xpub` and `btcpay-signet-host` ([`placeholders.md`](../plans/placeholders.md)). A missing or unreachable BTCPay opens the rail's circuit breaker. It never falls back to a fake, and it never stops the app (P8).
+5. **Placeholders** until the node is set up: `btcpay-base-url` (the onion URL), `btcpay-api-key`, `btcpay-webhook-secret`, `btcpay-mainnet-xpub` and `btcpay-signet-host` ([`placeholders.md`](../plans/placeholders.md)). A missing or unreachable BTCPay opens the rail's circuit breaker. It never falls back to a fake, and it never stops the app (P8).
 6. **Checks instead of IaC.** The app's startup check compares preview address prefixes with `Bitcoin:Network`, and refuses to start on a mismatch (invariant 4, PR 6). A read-only connection check verifies the node (PR 8d):
    - health reports synchronized;
    - the BTCPay version matches the regtest pin;
    - the network matches;
    - a test webhook arrives;
    - the round-trip time is reported.
+
+## Connection: Tor onion service (#132)
+
+| Item | Decision |
+|---|---|
+| Node side | Install the StartOS **Tor** service and add an onion service to BTCPay's `main` interface, as plain HTTP. StartOS recommends HTTP over onion: Tor already encrypts end to end, and the onion address authenticates the server (*Documented*, StartOS docs). The signet host (`btcpayserver-docker`) publishes BTCPay as an onion by default, so every environment uses the same path |
+| App side | A **Tor client sidecar** in `web` and `worker` exposes SOCKS5 on `127.0.0.1:9050`. The BTCPay adapter's `HttpClient` goes through `Btcpay:SocksProxy`; .NET 10 hands the `.onion` hostname to the proxy for Tor to resolve (*Observed*, tested against a stub SOCKS5 server). Outside regtest, `http://` is accepted only for a `.onion` host |
+| Access control | StartOS documents no onion client authorization, so anyone who learns the address can reach BTCPay's login page. The onion URL (`btcpay-base-url`) is therefore treated as a secret: kept in Key Vault and never logged. Behind it: an API key with minimal permissions (`AGENTS.md` §4.6), and 2FA or passkeys on BTCPay accounts |
+| Webhooks (BTCPay → app) | BTCPay 2.4.4 uses its SOCKS proxy only for `.onion` URLs (*Observed*, `WebhookSender.GetClient`), so webhooks to the app's Front Door URL leave over clearnet from the operator's home IP. **Accepted for now.** Optional mitigation: a StartOS outbound gateway for BTCPay. Reconciliation polling (`AGENTS.md` §4.6) covers missed webhooks either way |
+| Latency | Tor adds seconds per request. The connection check (PR 8d) reports round-trip times, and the rail's breaker and reconciliation tolerate failed circuits |
+| Sidecar image | Built by us (PR 10) from the Tor Project's Debian package on a base image pinned by digest, and scanned like the app images. No official Tor client container was found (*Inferred*; confirm in PR 10) |
+| Rejected | **Cloudflare Tunnel:** Cloudflare terminates TLS at its edge, so it would see the API key and every developer's xpub (invariant 8), and it adds an intermediary to the payment path (`project.md` §0.3). **StartTunnel:** end-to-end TLS and fast, but it adds a VPS to run and a public login page. It is the fallback if Tor latency hurts checkout |
 
 ## Options considered
 
@@ -60,5 +72,5 @@
 ## Revisit when
 
 - Sales volume or uptime needs outgrow a home node: colo, or a second node.
-- #132 is decided. Record the chosen connection method here.
+- Tor round trips measured by the connection check are too slow for checkout: switch the connection to StartTunnel (#132).
 - Start9's package allows networks other than mainnet.

@@ -4,8 +4,7 @@ using Microsoft.Extensions.Options;
 namespace Freeside.Worker;
 
 /// <summary>
-/// Logs the bound network once the host has started. The job runner replaces this as the worker's
-/// real workload in Phase 0 PR 5.
+/// Logs the bound network once the host has started.
 /// </summary>
 internal sealed partial class StartupLogger(IOptions<BitcoinOptions> options, ILogger<StartupLogger> logger)
     : BackgroundService

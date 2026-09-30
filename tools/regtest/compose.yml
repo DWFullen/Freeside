@@ -118,6 +118,11 @@ services:
       retries: 30
     volumes:
       - app_postgres_datadir:/var/lib/postgresql
+      # Run once, when the volume is first created: the group roles every
+      # environment has, then this stack's login roles. `make regtest-migrate`
+      # then applies the migrations.
+      - ../../src/Freeside.Infrastructure/Database/bootstrap-roles.sql:/docker-entrypoint-initdb.d/10-bootstrap-roles.sql:ro
+      - ./app-postgres-logins.sql:/docker-entrypoint-initdb.d/20-logins.sql:ro
 
   # SMTP sink for IEmailSender (PR 7). UI at http://127.0.0.1:8025.
   mailpit:

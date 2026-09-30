@@ -3,6 +3,7 @@ using System;
 using Freeside.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Freeside.Infrastructure.Migrations
 {
     [DbContext(typeof(FreesideDbContext))]
-    partial class FreesideDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930224343_AddWorkQueues")]
+    partial class AddWorkQueues
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

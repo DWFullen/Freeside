@@ -1,7 +1,9 @@
 using Azure.Core;
 using Azure.Identity;
 using Freeside.Core.Ledger;
+using Freeside.Core.Persistence;
 using Freeside.Infrastructure.Ledger;
+using Freeside.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -17,7 +19,7 @@ public static class DatabaseServiceCollectionExtensions
 
     /// <summary>
     /// Binds <c>Database</c>, validates it when the host starts, and registers the data source,
-    /// <see cref="FreesideDbContext"/> and <see cref="ILedgerWriter"/>. Requires
+    /// <see cref="FreesideDbContext"/>, <see cref="ILedgerWriter"/> and <see cref="IUnitOfWork"/>. Requires
     /// <c>AddBitcoinNetwork</c>. Never applies migrations.
     /// </summary>
     public static IServiceCollection AddFreesideDatabase(this IServiceCollection services)
@@ -47,6 +49,7 @@ public static class DatabaseServiceCollectionExtensions
             FreesideDbContextOptions.Configure(builder, provider.GetRequiredService<NpgsqlDataSource>()));
 
         services.TryAddScoped<ILedgerWriter, EfLedgerWriter>();
+        services.TryAddScoped<IUnitOfWork, EfUnitOfWork>();
         return services;
     }
 }

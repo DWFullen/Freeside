@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Freeside.Core\Freeside.Core.csproj" />
+    <ProjectReference Include="..\Freeside.Infrastructure\Freeside.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

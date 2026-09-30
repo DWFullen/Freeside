@@ -81,7 +81,7 @@ tools/regtest/bitcoin-cli.sh -generate 1    # mine a block; any bitcoin-cli comm
   - It creates a store with a throwaway watch-only BIP84 xpub. BTCPay never holds a private key.
   - It checks that invoices get fresh `bcrt1` addresses derived from that xpub, and that a paid invoice settles after one confirmation and not before.
   - It fails, rather than skips, when the stack is down. The CI `regtest` job runs it.
-- **Versions:** images are pinned by tag and digest. BTCPay, NBXplorer, bitcoind and BTCPay's Postgres follow [btcpayserver-docker](https://github.com/btcpayserver/btcpayserver-docker), the deployment the production VM will use.
+- **Versions:** images are pinned by tag and digest. BTCPay, NBXplorer, bitcoind and BTCPay's Postgres match what the operator's Start9 node runs ([ADR 0013](docs/adr/0013-btcpay-on-operator-start9-node.md)): the StartOS [BTCPay](https://github.com/Start9Labs/btcpayserver-startos) and [Bitcoin Core](https://github.com/Start9Labs/bitcoin-core-startos) packages. When the node's package is updated, re-pin those four in `compose.yml` by hand.
 - **Cloud sessions:** in a claude.ai/code session, the SessionStart hook in [`.claude/settings.json`](.claude/settings.json) starts dockerd, and the environment setup script pre-pulls the images.
 
 ### Repo checks
@@ -100,7 +100,7 @@ CodeQL (C# and GitHub Actions) and dependency review run as their own workflows 
 
 ### Dependabot PRs and lock files
 
-[Dependabot](.github/dependabot.yml) proposes weekly updates for NuGet packages, GitHub Actions, the SDK in `global.json` and the regtest compose images. It waits 7 days after each release; security updates skip the wait. The BTCPay stack's images come as one PR: check it against btcpayserver-docker before merging.
+[Dependabot](.github/dependabot.yml) proposes weekly updates for NuGet packages, GitHub Actions, the SDK in `global.json`, and the app Postgres and Mailpit images in the regtest stack. It waits 7 days after each release; security updates skip the wait. It leaves the BTCPay stack's images alone: they follow the Start9 node (above).
 
 A NuGet update can leave `packages.lock.json` stale in projects that reference the updated project ([dependabot-core #13950](https://github.com/dependabot/dependabot-core/issues/13950)). CI's `--locked-mode` restore then fails with `NU1004`. To fix it, check out the Dependabot branch, then run:
 

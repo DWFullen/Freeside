@@ -8,12 +8,16 @@
 # throwaway for this network and must never be reused anywhere else. Ports are
 # published on 127.0.0.1 only; NBXplorer and BTCPay's Postgres aren't published.
 #
-# Images are pinned by tag and digest (AGENTS.md §7.4); Dependabot updates
-# both. The BTCPay stack (bitcoind, NBXplorer, BTCPay, BTCPay's Postgres)
-# follows btcpayserver-docker at commit dc5f84d1, the deployment the
-# production VM uses (PR 8d), so bump those four together. The app's Postgres
-# matches the newest major Azure Database for PostgreSQL Flexible Server
-# offers as GA (#13).
+# Images are pinned by tag and digest (AGENTS.md §7.4).
+# - The BTCPay stack (bitcoind, NBXplorer, BTCPay, BTCPay's Postgres) matches
+#   what the operator's Start9 node runs (ADR 0013): the StartOS BTCPay package
+#   (Start9Labs/btcpayserver-startos at 21ce7266) and Bitcoin Core package
+#   (Start9Labs/bitcoin-core-startos 31.x, Bitcoin Core 31.1). Start9 runs the
+#   same upstream BTCPay, NBXplorer and Postgres images, and its own build of
+#   the same Bitcoin Core release. Re-pin these four by hand when the node's
+#   package is updated; Dependabot leaves them alone.
+# - The app's Postgres matches the newest major Azure Database for PostgreSQL
+#   Flexible Server offers as GA (#13). Dependabot updates it and Mailpit.
 
 name: freeside-regtest
 
@@ -61,7 +65,7 @@ services:
       - btcpay_postgres_datadir:/var/lib/postgresql
 
   nbxplorer:
-    image: nicolasdorier/nbxplorer:2.6.18@sha256:b2bb3c74b7407649f8d2efac700f2e137ab407fa49828b246fa6968489c9f3ad
+    image: nicolasdorier/nbxplorer:2.6.13@sha256:d4162f44fff6c7e614ce75974d383ba3138e1ab66e2b779d88a7bb16555ce390
     environment:
       NBXPLORER_NETWORK: regtest
       NBXPLORER_CHAINS: btc

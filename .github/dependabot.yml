@@ -41,8 +41,9 @@ updates:
         update-types: [version-update:semver-major]
 
   # tools/regtest/compose.yml: images pinned as tag@digest; both are updated.
-  # The BTCPay stack follows btcpayserver-docker, so its images come in one PR
-  # to check against that repo. A Postgres major is a decision (#13), not a bump.
+  # The BTCPay stack must match what the operator's Start9 node runs (ADR 0013),
+  # so it is re-pinned by hand when that package is updated, never by
+  # Dependabot. A Postgres major is a decision (#13), not a bump.
   - package-ecosystem: docker-compose
     directory: "/tools/regtest"
     schedule:
@@ -50,11 +51,8 @@ updates:
       day: monday
     cooldown:
       default-days: 7
-    groups:
-      btcpay-stack:
-        patterns: ["btcpayserver/*", "nicolasdorier/nbxplorer"]
     ignore:
+      - dependency-name: "btcpayserver/*"
+      - dependency-name: "nicolasdorier/nbxplorer"
       - dependency-name: "postgres"
-        update-types: [version-update:semver-major]
-      - dependency-name: "btcpayserver/postgres"
         update-types: [version-update:semver-major]

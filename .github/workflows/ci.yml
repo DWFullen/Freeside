@@ -73,6 +73,10 @@ jobs:
       - name: Start the regtest stack
         run: make regtest-up
 
+      # Proves the init scripts and the migrations work on the stack's app database.
+      - name: Apply migrations to the stack's app database
+        run: make regtest-migrate
+
       - name: Smoke test
         run: make regtest-test
 

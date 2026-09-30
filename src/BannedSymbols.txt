@@ -73,3 +73,8 @@ M:System.Random.NextSingle;Binary floating point is banned on money paths (AGENT
 M:System.Numerics.BigInteger.Log(System.Numerics.BigInteger);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
 M:System.Numerics.BigInteger.Log(System.Numerics.BigInteger,System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
 M:System.Numerics.BigInteger.Log10(System.Numerics.BigInteger);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5).
+M:System.TimeSpan.op_Multiply(System.TimeSpan,System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+M:System.TimeSpan.op_Multiply(System.Double,System.TimeSpan);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+M:System.TimeSpan.op_Division(System.TimeSpan,System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+M:System.TimeSpan.Multiply(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.
+M:System.TimeSpan.Divide(System.Double);Binary floating point is banned on money paths (AGENTS.md §2, invariant 5). Use Ticks.

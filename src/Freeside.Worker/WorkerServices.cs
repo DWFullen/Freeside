@@ -1,4 +1,6 @@
 using Freeside.Core.Bitcoin;
+using Freeside.Infrastructure.Database;
+using Freeside.Infrastructure.Messaging;
 
 namespace Freeside.Worker;
 
@@ -10,6 +12,8 @@ public static class WorkerServices
     public static IServiceCollection Configure(IServiceCollection services)
     {
         services.AddBitcoinNetwork();
+        services.AddFreesideDatabase();
+        services.AddFreesideQueueProcessors();
         services.AddHostedService<StartupLogger>();
         return services;
     }

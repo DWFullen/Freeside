@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Scope | `project.md` §10, Phase 0: IaC (Azure + R2), CI/CD, regtest harness, auth (email + passkey), ledger schema, `IPaymentRail` |
-| Status | Approved 2026-09-27. PR 0 and PR 1 merged in #1 (2026-09-28), PR 2 in #131 (2026-09-29), PR 3 in #133 (2026-09-30). PR 4 in progress |
+| Status | Approved 2026-09-27. PR 0 and PR 1 merged in #1 (2026-09-28), PR 2 in #131 (2026-09-29), PR 3 in #133 (2026-09-30), PR 4 in #134 (2026-09-30). PR 5 in progress |
 | Related | [ADR 0012](../adr/0012-terraform-avm-state-backend.md), [ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md), [`placeholders.md`](placeholders.md) |
 | Tracking | GitHub issues: [#22 Phase 0](https://github.com/DWFullen/Freeside/issues/22), [#2 Open decisions](https://github.com/DWFullen/Freeside/issues/2), [#23 ADRs](https://github.com/DWFullen/Freeside/issues/23), [#24 Phase 1](https://github.com/DWFullen/Freeside/issues/24). Each PR below has its own issue |
 
@@ -45,8 +45,8 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 | 1 | [#29](https://github.com/DWFullen/Freeside/issues/29) | Solution skeleton + CI | no | 0 | Done ([#1](https://github.com/DWFullen/Freeside/pull/1)) |
 | 2 | [#27](https://github.com/DWFullen/Freeside/issues/27) | Supply chain | no | 1 | Done ([#131](https://github.com/DWFullen/Freeside/pull/131)) |
 | 3 | [#30](https://github.com/DWFullen/Freeside/issues/30) | Regtest harness + dockerd session hook | yes | 1 | Done ([#133](https://github.com/DWFullen/Freeside/pull/133)) |
-| 4 | [#31](https://github.com/DWFullen/Freeside/issues/31) | Data layer, money types, append-only ledger | yes (Testcontainers) | 1 | In progress |
-| 5 | [#32](https://github.com/DWFullen/Freeside/issues/32) | Inbox/outbox + Postgres job queue | yes | 4 | Planned |
+| 4 | [#31](https://github.com/DWFullen/Freeside/issues/31) | Data layer, money types, append-only ledger | yes (Testcontainers) | 1 | Done ([#134](https://github.com/DWFullen/Freeside/pull/134)) |
+| 5 | [#32](https://github.com/DWFullen/Freeside/issues/32) | Inbox/outbox + Postgres job queue | yes | 4 | In progress |
 | 6 | [#33](https://github.com/DWFullen/Freeside/issues/33) | `IPaymentRail`, `RailSelector`, BTCPay adapter, fakes | yes | 3, 5 | Planned |
 | 7 | [#34](https://github.com/DWFullen/Freeside/issues/34) | Auth: email login link + passkeys | yes | 5 | Planned |
 | 8a | [#35](https://github.com/DWFullen/Freeside/issues/35) | Terraform bootstrap + Terraform CI + `setup.sh` | no | 2 | Planned |
@@ -155,7 +155,7 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 - **Roles:** `bootstrap-roles.sql` creates the group roles `freeside_migrator` (owns the tables) and `freeside_app`. The migration refuses to run without them.
 - **Migrations:** versioned EF Core migrations, never applied at app startup. `dotnet-ef` is pinned as a local tool. CI runs `has-pending-model-changes`.
 - **Postgres auth:** password auth only on regtest, checked at startup. Everywhere else, Entra managed identity over TLS, with tokens from `ManagedIdentityCredential`. The token path is tested against a real Postgres with a fake credential.
-- **Not wired into the hosts yet:** PR 5 is the first consumer.
+- **Hosts:** wired into Web and Worker in PR 5, the first consumer.
 - **Tests:**
   - migrations apply to an empty database as a non-superuser;
   - ledger mutations are rejected (by privilege and by trigger);
@@ -164,9 +164,26 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 - **Invariants:** 5, 7.
 
 ### PR 5: Inbox/outbox + job queue
-- **Tables:** `inbox_messages` (unique `(source, dedupe_key)`), `outbox_messages`, `jobs`.
-- **Worker:** runners claim work with `FOR UPDATE SKIP LOCKED` and a lease. Retries back off exponentially, then go to a dead state.
-- **Tests:** concurrent runners process each job exactly once; an expired lease is reclaimed; retry and dead-letter; duplicate inbox inserts are ignored; an outbox row rolls back with its transaction.
+- **Tables:** `jobs` (optional unique `dedupe_key`), `inbox_messages` (unique `(source, dedupe_key)`, the verified raw body as `text`), `outbox_messages`. They share the queue columns: `status` (`Pending`, `Running`, `Succeeded`, `Dead`), `attempts`, `max_attempts`, `run_after`, the lease (`locked_by`, `locked_until`), `last_error`, `correlation_id`.
+- **Privileges:** the app role holds `SELECT, INSERT, UPDATE`, never `DELETE`. Clearing out finished rows is a separate job with its own privileges ([#135](https://github.com/DWFullen/Freeside/issues/135)).
+- **Core** (`Freeside.Core.Messaging`, `Freeside.Core.Persistence`):
+  - `IJobScheduler`, `IInbox.AcceptAsync` (returns `false` for a duplicate; the row is stored before it returns, invariant 6's "persist, then acknowledge") and `IOutbox.Add`, which joins the caller's `IUnitOfWork`.
+  - Handlers: `IJobHandler` by job type, `IInboxHandler` by source, `IOutboxHandler` by message type. Each gets a `WorkItem`.
+- **Engine:** one set of SQL for all three tables.
+  - A claim takes due rows with `FOR UPDATE SKIP LOCKED`, sets a lease and counts the attempt. A worker claims only the keys it has handlers for, so an older worker in a rolling deploy never fails a newer job type.
+  - An expired lease is claimed again and counts as an attempt. Complete, fail and release apply only while the worker still holds the lease, so a worker that lost it can't overwrite the result. Delivery is at least once; handlers are idempotent (`AGENTS.md` §4.6).
+  - A failure goes back to `Pending` after an exponential backoff with jitter, capped (integer ticks, no floating point), or to `Dead` after `max_attempts`, logged at Error. Leases that expire on the last attempt are swept to `Dead`. A graceful shutdown releases unfinished items without counting the attempt.
+  - Polling only (1 s default). `LISTEN/NOTIFY` is left out; it can be added if latency ever matters.
+- **Hosts:** the Worker runs `JobRunner`, `InboxProcessor` and `OutboxDispatcher` (`WorkQueues` settings, validated at startup). Web registers only the writers, ready for PR 6's webhook endpoint. Both now require `Database` settings, and the launch profiles point at the regtest stack's database.
+- **Regtest stack:** `app-postgres` runs `bootstrap-roles.sql` and creates regtest login roles on first start. `make regtest-migrate` applies the migrations as the migrator login; the CI `regtest` job runs it.
+- **Banned list:** `TimeSpan` multiplied or divided by a `double` (an `int` converts to `double` silently there).
+- **Tests** (Testcontainers):
+  - four workers run each of 200 jobs exactly once; the hosted runner does the same with four loops;
+  - an expired lease is reclaimed with `attempts = 2`, and the old holder's late results are fenced out;
+  - retry with backoff, then `Dead`; the sweep; unhandled types stay `Pending`; release doesn't count an attempt;
+  - job dedupe; duplicate inbox deliveries are ignored per source; outbox rows and ledger entries roll back or commit together;
+  - privileges; end to end through the hosted job runner, inbox processor and outbox dispatcher;
+  - mutation checks: removing `SKIP LOCKED` or the lease fence fails the tests.
 - **Invariants:** 6, 7.
 
 ### PR 6: Rails + BTCPay adapter

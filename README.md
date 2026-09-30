@@ -59,7 +59,12 @@ dotnet run --project src/Freeside.Web      # http://localhost:5080, health check
 dotnet run --project src/Freeside.Worker
 ```
 
-The launch profiles set `Bitcoin__Network=regtest`.
+The launch profiles set `Bitcoin__Network=regtest` and point `Database` at the regtest stack's app database, so start that first:
+
+```sh
+make regtest-up         # the stack, including the app's Postgres (below)
+make regtest-migrate    # apply the migrations
+```
 
 **`Bitcoin:Network` has no default** (`AGENTS.md` §2, invariant 4). Both hosts refuse to start if it is missing, or if it isn't exactly one of `regtest`, `signet`, `testnet4`, `mainnet`. They also refuse to start if a fake service (a stand-in listed in [`docs/plans/placeholders.md`](docs/plans/placeholders.md)) is registered on any network other than `regtest`.
 
@@ -82,16 +87,33 @@ The launch profiles set `Bitcoin__Network=regtest`.
   - `Password` is allowed only when `Bitcoin:Network` is `regtest`.
   - Everywhere else it's `EntraManagedIdentity`: a managed identity's token instead of a password, over TLS.
   - Startup refuses anything else.
-- **Not wired into Web or Worker yet.** PR 5 is the first code that uses the database, and connects it there.
+- **Both hosts require `Database` settings**, and never connect at startup.
+
+### Background work: jobs, inbox and outbox
+
+Three Postgres tables hold the work the Worker does in the background. No message broker (`AGENTS.md` §1).
+
+| Queue | Written with | Handled by | Used for |
+|---|---|---|---|
+| `jobs` | `IJobScheduler.ScheduleAsync` (optional run-after time and dedupe key) | `IJobHandler`, by job type | Reconciliation, debits, anything scheduled |
+| `inbox_messages` | `IInbox.AcceptAsync`: stores the verified raw body and returns `false` for a duplicate `(source, dedupe key)` | `IInboxHandler`, by source | Webhooks: persist, acknowledge, then process (`AGENTS.md` §4.6) |
+| `outbox_messages` | `IOutbox.Add` inside `IUnitOfWork.ExecuteAsync`, so it commits or rolls back with the change that caused it | `IOutboxHandler`, by message type | Emails and other side effects of a state change |
+
+- **Delivery is at least once.** A handler can run again after a crash or an expired lease, so every handler must be idempotent.
+- **Claims** use `FOR UPDATE SKIP LOCKED` and a lease (`WorkQueues:Lease`, 5 minutes). A handler must finish within it. A worker claims only the types it has handlers for.
+- **Failures** retry with exponential backoff and jitter, then go to `Dead` after `WorkQueues:MaxAttempts` (10) and are logged at Error for review.
+- **Settings** (`WorkQueues`, validated at startup): `PollInterval`, `BatchSize`, `Lease`, `MaxAttempts`, `BackoffBase`, `BackoffCap`, `Concurrency`.
+- **Finished rows are kept.** The app role can't delete them; a retention job comes later ([#135](https://github.com/DWFullen/Freeside/issues/135)).
 
 ### Regtest stack
 
 Needs Docker with Compose v2. [`tools/regtest/compose.yml`](tools/regtest/compose.yml) runs BTCPay Server on **regtest** with bitcoind, NBXplorer and BTCPay's Postgres, plus the app's own Postgres and Mailpit. Every credential in it is a throwaway that works only on this local stack.
 
 ```sh
-make regtest-up      # start, mine 101 blocks, wait until BTCPay is synchronized
-make regtest-test    # smoke test against the running stack
-make regtest-down    # stop, and delete every volume
+make regtest-up        # start, mine 101 blocks, wait until BTCPay is synchronized
+make regtest-migrate   # apply the app's migrations to the stack's app database
+make regtest-test      # smoke test against the running stack
+make regtest-down      # stop, and delete every volume
 tools/regtest/bitcoin-cli.sh -generate 1    # mine a block; any bitcoin-cli command works
 ```
 
@@ -99,13 +121,14 @@ tools/regtest/bitcoin-cli.sh -generate 1    # mine a block; any bitcoin-cli comm
 |---|---|---|
 | BTCPay Server | http://127.0.0.1:49392 | `admin@freeside.test` / `regtest-throwaway`, created by the first smoke test run |
 | bitcoind RPC | 127.0.0.1:43782 | `freeside` / `regtest-throwaway`; wallet `default` |
-| App Postgres 18 | 127.0.0.1:55432 | database and user `freeside`, password `regtest-throwaway` |
+| App Postgres 18 | 127.0.0.1:55432 | database `freeside`. Admin `freeside`, migrator login `freeside_migrator_login`, app login `freeside_app_login`; all `regtest-throwaway` |
 | Mailpit | SMTP 127.0.0.1:1025, UI http://127.0.0.1:8025 | Accepts any |
 
 - **Smoke test** (`tests/Freeside.Regtest.Tests`, trait `Category=Regtest`):
   - It creates a store with a throwaway watch-only BIP84 xpub. BTCPay never holds a private key.
   - It checks that invoices get fresh `bcrt1` addresses derived from that xpub, and that a paid invoice settles after one confirmation and not before.
   - It fails, rather than skips, when the stack is down. The CI `regtest` job runs it.
+- **App database roles** are created only when its volume is first created. A stack started before PR 5 has none: run `make regtest-down` once, then `make regtest-up`.
 - **Versions:** images are pinned by tag and digest. BTCPay, NBXplorer, bitcoind and BTCPay's Postgres match what the operator's Start9 node runs ([ADR 0013](docs/adr/0013-btcpay-on-operator-start9-node.md)): the StartOS [BTCPay](https://github.com/Start9Labs/btcpayserver-startos) and [Bitcoin Core](https://github.com/Start9Labs/bitcoin-core-startos) packages. When the node's package is updated, re-pin those four in `compose.yml` by hand.
 - **Cloud sessions:** in a claude.ai/code session, the SessionStart hook in [`.claude/settings.json`](.claude/settings.json) starts dockerd, and the environment setup script pre-pulls the images.
 

@@ -11,7 +11,9 @@ public sealed class MigrationTests(PostgresFixture postgres)
         await using var db = PostgresFixture.CreateContext(postgres.MigratorConnectionString);
 
         Assert.Empty(await db.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken));
-        Assert.Contains(await db.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken), m => m.EndsWith("_InitialLedger", StringComparison.Ordinal));
+        var applied = await db.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken);
+        Assert.Contains(applied, m => m.EndsWith("_InitialLedger", StringComparison.Ordinal));
+        Assert.Contains(applied, m => m.EndsWith("_AddWorkQueues", StringComparison.Ordinal));
         Assert.False(await PostgresFixture.ScalarAsync<bool>(postgres.SuperuserConnectionString,
             $"SELECT rolsuper FROM pg_roles WHERE rolname = '{PostgresFixture.MigratorLogin}'"));
     }
@@ -24,8 +26,12 @@ public sealed class MigrationTests(PostgresFixture postgres)
         Assert.False(db.Database.HasPendingModelChanges());
     }
 
-    [Fact]
-    public async Task The_ledger_table_is_owned_by_the_migrator_role() =>
+    [Theory]
+    [InlineData("ledger_entries")]
+    [InlineData("jobs")]
+    [InlineData("inbox_messages")]
+    [InlineData("outbox_messages")]
+    public async Task Tables_are_owned_by_the_migrator_role(string table) =>
         Assert.Equal("freeside_migrator", await PostgresFixture.ScalarAsync<string>(postgres.SuperuserConnectionString,
-            "SELECT tableowner FROM pg_tables WHERE tablename = 'ledger_entries'"));
+            $"SELECT tableowner FROM pg_tables WHERE tablename = '{table}'"));
 }

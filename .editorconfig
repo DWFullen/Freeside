@@ -46,8 +46,15 @@ dotnet_naming_style.underscore_camel.required_prefix = _
 # Naming rules are only enforced at build time when IDE1006 has an explicit severity.
 dotnet_diagnostic.IDE1006.severity = warning
 
-# Money paths: floating point is banned (AGENTS.md §2, invariant 5).
-# Enforce with an analyzer in Phase 0; this file cannot express it.
+# Money paths: floating point is banned (AGENTS.md §2, invariant 5). Enforced in
+# Freeside.Core and Freeside.Infrastructure by the banned-API analyzer
+# (src/BannedSymbols.txt) and by tests/Freeside.Core.Tests/FloatingPointBanTests.cs,
+# which also catches declarations, casts and literals the analyzer can't see.
+
+[src/Freeside.Infrastructure/Migrations/**.cs]
+# Written by `dotnet ef migrations add`. Marked generated so analyzers skip it and a
+# regenerated migration builds as is; FloatingPointBanTests still scans it.
+generated_code = true
 
 [tests/**.cs]
 # Test names read as sentences (Host_refuses_to_start_when_...).

@@ -1,11 +1,13 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Freeside.Core/Freeside.Core.csproj" />
+    <Project Path="src/Freeside.Infrastructure/Freeside.Infrastructure.csproj" />
     <Project Path="src/Freeside.Web/Freeside.Web.csproj" />
     <Project Path="src/Freeside.Worker/Freeside.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Freeside.Core.Tests/Freeside.Core.Tests.csproj" />
+    <Project Path="tests/Freeside.Infrastructure.Tests/Freeside.Infrastructure.Tests.csproj" />
     <Project Path="tests/Freeside.Regtest.Tests/Freeside.Regtest.Tests.csproj" />
     <Project Path="tests/Freeside.Web.Tests/Freeside.Web.Tests.csproj" />
     <Project Path="tests/Freeside.Worker.Tests/Freeside.Worker.Tests.csproj" />

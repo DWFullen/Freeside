@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Scope | `project.md` §10, Phase 0: IaC (Azure + R2), CI/CD, regtest harness, auth (email + passkey), ledger schema, `IPaymentRail` |
-| Status | Approved 2026-09-27. PR 0 and PR 1 merged in #1 (2026-09-28), PR 2 in #131 (2026-09-29). PR 3 in progress |
+| Status | Approved 2026-09-27. PR 0 and PR 1 merged in #1 (2026-09-28), PR 2 in #131 (2026-09-29), PR 3 in #133 (2026-09-30). PR 4 in progress |
 | Related | [ADR 0012](../adr/0012-terraform-avm-state-backend.md), [ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md), [`placeholders.md`](placeholders.md) |
 | Tracking | GitHub issues: [#22 Phase 0](https://github.com/DWFullen/Freeside/issues/22), [#2 Open decisions](https://github.com/DWFullen/Freeside/issues/2), [#23 ADRs](https://github.com/DWFullen/Freeside/issues/23), [#24 Phase 1](https://github.com/DWFullen/Freeside/issues/24). Each PR below has its own issue |
 
@@ -44,8 +44,8 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 | 0 | [#28](https://github.com/DWFullen/Freeside/issues/28) | Docs: ADR 0012, `project.md` §8, README, plans | no | — | Done ([#1](https://github.com/DWFullen/Freeside/pull/1)) |
 | 1 | [#29](https://github.com/DWFullen/Freeside/issues/29) | Solution skeleton + CI | no | 0 | Done ([#1](https://github.com/DWFullen/Freeside/pull/1)) |
 | 2 | [#27](https://github.com/DWFullen/Freeside/issues/27) | Supply chain | no | 1 | Done ([#131](https://github.com/DWFullen/Freeside/pull/131)) |
-| 3 | [#30](https://github.com/DWFullen/Freeside/issues/30) | Regtest harness + dockerd session hook | yes | 1 | In progress |
-| 4 | [#31](https://github.com/DWFullen/Freeside/issues/31) | Data layer, money types, append-only ledger | yes (Testcontainers) | 1 | Planned |
+| 3 | [#30](https://github.com/DWFullen/Freeside/issues/30) | Regtest harness + dockerd session hook | yes | 1 | Done ([#133](https://github.com/DWFullen/Freeside/pull/133)) |
+| 4 | [#31](https://github.com/DWFullen/Freeside/issues/31) | Data layer, money types, append-only ledger | yes (Testcontainers) | 1 | In progress |
 | 5 | [#32](https://github.com/DWFullen/Freeside/issues/32) | Inbox/outbox + Postgres job queue | yes | 4 | Planned |
 | 6 | [#33](https://github.com/DWFullen/Freeside/issues/33) | `IPaymentRail`, `RailSelector`, BTCPay adapter, fakes | yes | 3, 5 | Planned |
 | 7 | [#34](https://github.com/DWFullen/Freeside/issues/34) | Auth: email login link + passkeys | yes | 5 | Planned |
@@ -139,12 +139,28 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 - **Outside the repo:** re-paste `setup.sh`.
 
 ### PR 4: Data layer
-- **Projects:** `src/Freeside.Infrastructure` (EF Core + Npgsql) and Testcontainers tests.
-- **Money types** in Core: `Sats`, `MilliSats`, `Money` (minor units + ISO 4217), and `ExchangeRate` (decimal string, source, timestamp). Conversion uses integer rational arithmetic with named rounding rules. BannedApiAnalyzers bans `double`, `float` and `Half` in Core and Infrastructure.
-- **Append-only ledger enforced in the database:** triggers reject `UPDATE`, `DELETE` and `TRUNCATE`, and the app role holds only `SELECT, INSERT`.
-- **Migrations:** versioned EF Core migrations, never applied at app startup. CI runs `has-pending-model-changes`.
-- **Postgres auth:** password auth only on regtest; Entra managed identity everywhere else.
-- **Tests:** migrations apply to an empty database; ledger mutations are rejected; no floating-point columns; FsCheck property tests for conversion and rounding.
+- **Projects:** `src/Freeside.Infrastructure` (EF Core 10 + Npgsql, snake_case names) and `tests/Freeside.Infrastructure.Tests` (Testcontainers, the same `postgres:18.6` pin as compose, with a drift test).
+- **Money types** in Core (`Freeside.Core.Monetary`):
+  - `Sats`, `MilliSats`: `long`, 0 to 21M BTC.
+  - `Money`: minor units plus an ISO 4217 `Currency` from a fixed exponent table.
+  - `ExchangeRate`: a decimal string, source and UTC timestamp.
+  - Conversions use exact `BigInteger` arithmetic with a `RoundingRule` (`Down`, `Up`, `HalfEven`).
+- **Floating point banned in Core and Infrastructure:**
+  - The banned-API analyzer (`src/BannedSymbols.txt`) rejects `Double`/`Single`/`Half` members, `Convert.ToDouble`/`ToSingle`, `Math` double functions, `MathF`, `TimeSpan.Total*` and `Random.NextDouble`.
+  - A canary showed RS0030 doesn't flag declarations, casts or literals (`double a = 1`, `19.99`). `FloatingPointBanTests` parses the source with Roslyn and catches those.
+- **Ledger** (`ledger_entries`):
+  - Columns: source event, actor, reason, previous and next state, `amount_msat` and `fiat_amount_minor` (`bigint`, never negative) with `fiat_currency`, correlation ID, UTC timestamps, and a unique idempotency key.
+  - `ILedgerWriter` in Core has append only.
+- **Append-only enforced in the database:** triggers reject `UPDATE`, `DELETE` and `TRUNCATE`, even for the owner. The app role holds only `SELECT, INSERT`, so it's still denied with the triggers disabled.
+- **Roles:** `bootstrap-roles.sql` creates the group roles `freeside_migrator` (owns the tables) and `freeside_app`. The migration refuses to run without them.
+- **Migrations:** versioned EF Core migrations, never applied at app startup. `dotnet-ef` is pinned as a local tool. CI runs `has-pending-model-changes`.
+- **Postgres auth:** password auth only on regtest, checked at startup. Everywhere else, Entra managed identity over TLS, with tokens from `ManagedIdentityCredential`. The token path is tested against a real Postgres with a fake credential.
+- **Not wired into the hosts yet:** PR 5 is the first consumer.
+- **Tests:**
+  - migrations apply to an empty database as a non-superuser;
+  - ledger mutations are rejected (by privilege and by trigger);
+  - no floating-point columns;
+  - FsCheck property tests for conversion bounds, rounding direction and msat↔sat.
 - **Invariants:** 5, 7.
 
 ### PR 5: Inbox/outbox + job queue

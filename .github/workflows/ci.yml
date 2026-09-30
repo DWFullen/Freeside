@@ -20,7 +20,11 @@ jobs:
   build-test:
     name: build-test
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      # Testcontainers' reaper container is pulled by tag; runners are thrown
+      # away after the job, so it isn't needed here.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,7 +42,13 @@ jobs:
       - name: Build
         run: dotnet build --no-restore -c Release
 
-      # Regtest tests need the docker stack; the regtest job runs them.
+      - name: EF model matches the migrations
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes --project src/Freeside.Infrastructure --configuration Release --no-build
+
+      # Regtest tests need the docker stack; the regtest job runs them. The
+      # Infrastructure tests start Postgres with Testcontainers (Docker is on the runner).
       - name: Test
         run: dotnet test --no-build -c Release --filter-not-trait "Category=Regtest"
 

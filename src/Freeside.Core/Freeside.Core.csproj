@@ -7,4 +7,10 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
   </ItemGroup>
 
+  <!-- Money path: binary floating point is a build error (AGENTS.md §2, invariant 5). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="..\BannedSymbols.txt" />
+  </ItemGroup>
+
 </Project>

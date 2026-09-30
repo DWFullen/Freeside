@@ -66,7 +66,7 @@ public sealed class StartupTests
             ["Database:Authentication"] = withDatabase ? (entra ? "EntraManagedIdentity" : "Password") : null,
         });
         builder.Services.AddKeyedSingleton<TokenCredential>(DatabaseServiceCollectionExtensions.TokenCredentialKey, new NoTokenCredential());
-        WorkerServices.Configure(builder.Services);
+        WorkerServices.Configure(builder.Services, builder.Configuration);
         return builder.Build();
     }
 

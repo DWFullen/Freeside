@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Scope | `project.md` §10, Phase 0: IaC (Azure + R2), CI/CD, regtest harness, auth (email + passkey), ledger schema, `IPaymentRail` |
-| Status | Approved 2026-09-27. PR 0 and PR 1 merged in #1 (2026-09-28), PR 2 in #131 (2026-09-29), PR 3 in #133 (2026-09-30), PR 4 in #134 (2026-09-30). PR 5 in progress |
+| Status | Approved 2026-09-27. PR 0 and PR 1 merged in #1 (2026-09-28), PR 2 in #131 (2026-09-29), PR 3 in #133 (2026-09-30), PR 4 in #134 (2026-09-30), PR 5 in #136 (2026-09-30). PR 6a in progress |
 | Related | [ADR 0012](../adr/0012-terraform-avm-state-backend.md), [ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md), [`placeholders.md`](placeholders.md) |
 | Tracking | GitHub issues: [#22 Phase 0](https://github.com/DWFullen/Freeside/issues/22), [#2 Open decisions](https://github.com/DWFullen/Freeside/issues/2), [#23 ADRs](https://github.com/DWFullen/Freeside/issues/23), [#24 Phase 1](https://github.com/DWFullen/Freeside/issues/24). Each PR below has its own issue |
 
@@ -36,6 +36,7 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 | R7 | The app renders checkout itself because of the unified multi-rail QR, so BTCPay's checkout page is never public (`AGENTS.md` §6.2 option 2). BTCPay is reached only through a Tor onion service, via a Tor client sidecar ([#132](https://github.com/DWFullen/Freeside/issues/132)) | ADR 0013 |
 | R8 | PR 8 is split into 8a–8d, and PR 10 is added for container images and deployment | This file |
 | R9 | BTCPay runs on the operator's Start9 node, not in Azure. No BTCPay VM, Bastion, subnet or resource group. Signet for dev and UAT runs on a separate machine the operator controls. Every node detail is a placeholder until the node is set up | [ADR 0013](../adr/0013-btcpay-on-operator-start9-node.md) |
+| R10 | PR 6 is split in two under #33: 6a is the payments domain in Core (no database, no BTCPay), and 6b is the BTCPay rail | This file |
 
 ## PR sequence
 
@@ -46,8 +47,8 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 | 2 | [#27](https://github.com/DWFullen/Freeside/issues/27) | Supply chain | no | 1 | Done ([#131](https://github.com/DWFullen/Freeside/pull/131)) |
 | 3 | [#30](https://github.com/DWFullen/Freeside/issues/30) | Regtest harness + dockerd session hook | yes | 1 | Done ([#133](https://github.com/DWFullen/Freeside/pull/133)) |
 | 4 | [#31](https://github.com/DWFullen/Freeside/issues/31) | Data layer, money types, append-only ledger | yes (Testcontainers) | 1 | Done ([#134](https://github.com/DWFullen/Freeside/pull/134)) |
-| 5 | [#32](https://github.com/DWFullen/Freeside/issues/32) | Inbox/outbox + Postgres job queue | yes | 4 | In progress |
-| 6 | [#33](https://github.com/DWFullen/Freeside/issues/33) | `IPaymentRail`, `RailSelector`, BTCPay adapter, fakes | yes | 3, 5 | Planned |
+| 5 | [#32](https://github.com/DWFullen/Freeside/issues/32) | Inbox/outbox + Postgres job queue | yes | 4 | Done ([#136](https://github.com/DWFullen/Freeside/pull/136)) |
+| 6 | [#33](https://github.com/DWFullen/Freeside/issues/33) | `IPaymentRail`, `RailSelector`, BTCPay adapter, fakes | yes | 3, 5 | In progress |
 | 7 | [#34](https://github.com/DWFullen/Freeside/issues/34) | Auth: email login link + passkeys | yes | 5 | Planned |
 | 8a | [#35](https://github.com/DWFullen/Freeside/issues/35) | Terraform bootstrap + Terraform CI + `setup.sh` | no | 2 | Planned |
 | 8b | [#36](https://github.com/DWFullen/Freeside/issues/36) | Azure: network, observability, Key Vault, ACR, Postgres | no | 8a | Planned |
@@ -187,9 +188,22 @@ Every PR builds and passes its tests on its own. PRs land in order unless the de
 - **Invariants:** 6, 7.
 
 ### PR 6: Rails + BTCPay adapter
-- **Core:** `IPaymentRail`, normalized invoice states and events, and a payment state machine per `AGENTS.md` §4.4. Backward transitions freeze and go to review.
-- **RailSelector skeleton:** priority per layer, circuit breaker, and the $10 on-chain minimum.
-- **Fakes:** `FakeStrikeRail` and `FakeFeeCollector` (`IFakeService`).
+Split in two (R10). **PR 6a, payments domain** (`Freeside.Core.Payments`, `Freeside.Core.Fees`):
+- **Rails:** `IPaymentRail` (create, get, cancel), `RailInvoiceRef`, `RailInvoiceSnapshot` with a normalized `RailInvoiceState` and `RailInvoiceConditions` (over-paid, partial, late, manually marked, cancelled by us, settlement policy violated), and `InvoiceEvent`, which only triggers a re-fetch.
+- **`PaymentStateMachine`:** maps a re-fetched invoice to a `PaymentState` (`AGENTS.md` §4.4) and never throws. The target is always the rail's state (invariant 2).
+  - Anything outside the expected moves is applied and sent to review: a backward move such as `Paid` → `Invalid`, a move out of a final state, a manual mark, a weaker settlement policy, or an unmapped value (invariant 15).
+  - Our own cancel of an unpaid invoice ends `Cancelled` without review.
+- **`RailSelector` skeleton:** the first healthy rail per layer in the developer's order. It skips rails that are unregistered, whose breaker is open, or that rejected this developer. On-chain is offered from $10 (`Payments:OnChainMinimumUsdCents`).
+- **`RailHealth`:**
+  - Per-rail breakers: 3 failures, or one authentication failure, open the breaker. It half-opens after the cooldown, and 3 successes close it.
+  - A kill switch, `Payments:Rails:<id>:Disabled`, takes effect without a restart.
+  - Holds for a rail that isn't configured or checked yet, and per-developer account rejections with an expiry.
+  - In memory for now ([#137](https://github.com/DWFullen/Freeside/issues/137)).
+- **Fees:** `IFeeCollector` (initiate a debit idempotently, read its status and return code).
+- **Fakes:** `FakeStrikeRail` and `FakeFeeCollector` (`IFakeService`). They're chosen by `Payments:Strike:Adapter` and `Fees:Collector:Adapter`. `Fake` is allowed only on regtest; unset turns the rail or collector off; any other value fails startup until the real adapter exists. The launch profiles use `Fake`.
+- **Tests:** the §4.4 table; every (state × rail state × conditions) combination, undefined values included; an FsCheck property that a paid payment never becomes unpaid without review; the breaker, the selector (including the $10 boundary), the fakes, and registration on regtest and signet. Mutation checks: throwing on unmapped input, or dropping the backward-move review, fails them.
+
+**PR 6b, BTCPay rail:**
 - **BTCPay adapter:**
   - Checks the HMAC over the raw body with a constant-time compare, and fails closed when no secret is configured.
   - Persists to the inbox and acknowledges. The worker re-fetches the invoice before every transition; transitions are idempotent on `(invoiceId, targetState)`.

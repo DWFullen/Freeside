@@ -9,7 +9,9 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "Bitcoin__Network": "regtest",
         "Database__Authentication": "Password",
-        "Database__ConnectionString": "Host=127.0.0.1;Port=55432;Database=freeside;Username=freeside_app_login;Password=regtest-throwaway"
+        "Database__ConnectionString": "Host=127.0.0.1;Port=55432;Database=freeside;Username=freeside_app_login;Password=regtest-throwaway",
+        "Fees__Collector__Adapter": "Fake",
+        "Payments__Strike__Adapter": "Fake"
       }
     }
   }
